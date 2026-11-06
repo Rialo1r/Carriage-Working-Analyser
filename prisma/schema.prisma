@@ -88,6 +88,8 @@ model Diagram {
   calendarRules CalendarRule[]
   requirements CompositionRequirement[]
   researchNotes ResearchNote[]
+  outgoing DiagramTransition[] @relation("transitionFrom")
+  incoming DiagramTransition[] @relation("transitionTo")
 }
 model Movement {
   id String @id @default(uuid()) @db.Uuid
@@ -266,5 +268,50 @@ model ResearchNote {
  diagramId String @db.Uuid
  diagram Diagram @relation(fields: [diagramId], references: [id], onDelete: Restrict)
  text String
+ createdAt DateTime @default(now())
+}
+
+model AnalysisScenario {
+ id String @id @default(uuid()) @db.Uuid
+ name String
+ startDate DateTime @db.Date
+ endDate DateTime @db.Date
+ diagramIds String[] @db.Uuid
+ assumptions String
+ createdAt DateTime @default(now())
+ transitions DiagramTransition[]
+ rotations Rotation[]
+}
+model DiagramTransition {
+ id String @id @default(uuid()) @db.Uuid
+ scenarioId String @db.Uuid
+ scenario AnalysisScenario @relation(fields: [scenarioId], references: [id], onDelete: Restrict)
+ fromId String @db.Uuid
+ from Diagram @relation("transitionFrom", fields: [fromId], references: [id], onDelete: Restrict)
+ toId String @db.Uuid
+ to Diagram @relation("transitionTo", fields: [toId], references: [id], onDelete: Restrict)
+ dayOffset Int @default(1)
+ confidence String @default("Unknown")
+ decision String @default("Pending")
+ kind String @default("Direct")
+ checks Json
+ evidenceId String? @db.Uuid
+ transferMovementId String? @db.Uuid
+ rationale String @default("")
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ @@unique([scenarioId, fromId, toId, dayOffset])
+}
+model Rotation {
+ id String @id @default(uuid()) @db.Uuid
+ scenarioId String @db.Uuid
+ scenario AnalysisScenario @relation(fields: [scenarioId], references: [id], onDelete: Restrict)
+ name String
+ physicalSetId String? @db.Uuid
+ steps Json
+ repeats Boolean @default(false)
+ periodDays Int?
+ status String
+ notes String
  createdAt DateTime @default(now())
 }

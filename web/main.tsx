@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { PDFViewer } from "./PDFViewer";
+import { RotationWorkspace, StationAnalysis, UnresolvedWorkspace } from "./RotationWorkspace";
 import { DailyTools, FormationWorkspace } from "./ResearchUI";
 import { OcrWorkspace } from "./OcrWorkspace";
 import "./style.css";
@@ -285,7 +286,7 @@ function App() {
         </div>
         <div className="edition">PERSONAL RESEARCH • PHASE 1</div>
         <nav>
-          {["Dashboard", "Documents", "OCR", "Diagrams", "Formations", "Stations"].map((t) => (
+          {["Dashboard", "Documents", "OCR", "Diagrams", "Formations", "Rotations", "Station Analysis", "Unresolved", "Stations"].map((t) => (
             <button
               className={tab === t ? "active" : ""}
               key={t}
@@ -331,7 +332,10 @@ function App() {
             {notice}
           </div>
         )}
-        {tab === "Formations" && <FormationWorkspace diagrams={diagrams}/>}
+        {tab === "Rotations" && <RotationWorkspace diagrams={diagrams} onOpen={id=>void action(()=>open(id))}/>}
+      {tab === "Station Analysis" && <StationAnalysis stations={stations} onOpen={id=>void action(()=>open(id))}/>}
+      {tab === "Unresolved" && <UnresolvedWorkspace onOpen={id=>void action(()=>open(id))}/>}
+      {tab === "Formations" && <FormationWorkspace diagrams={diagrams}/>}
       {tab === "OCR" && <OcrWorkspace documents={docs} onOpen={id=>void action(()=>open(id))}/>}
       {tab === "Dashboard" && (
           <>

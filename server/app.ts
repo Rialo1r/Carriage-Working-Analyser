@@ -1,4 +1,5 @@
 import Fastify from "fastify";
+import { registerRotations } from "./rotation-routes.js";
 import { registerDaily } from "./daily-routes.js";
 import { registerOcr } from "./ocr-routes.js";
 import multipart from "@fastify/multipart";
@@ -420,6 +421,7 @@ export async function buildApp(
   );
   registerOcr(app, db, storage);
   registerDaily(app, db);
+  registerRotations(app, db);
   if (options.serveWeb !== false) {
     try {
       await access(path.resolve("dist/index.html"));
