@@ -4,3 +4,8 @@ dist
 .env
 .data
 *.log
+
+.data-demo
+test-results
+playwright-report
+backups

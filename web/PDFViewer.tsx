@@ -11,10 +11,18 @@ export function PDFViewer({
   fileId: string;
   startPage?: number;
   rotation?: number;
-  onCrop?: (page:number,region:{x:number;y:number;width:number;height:number})=>void;
+  onCrop?: (
+    page: number,
+    region: { x: number; y: number; width: number; height: number },
+  ) => void;
 }) {
-  const [selection,setSelection]=useState<{x:number;y:number;width:number;height:number}|null>(null);
-  const drag=useRef<{x:number;y:number}|null>(null);
+  const [selection, setSelection] = useState<{
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  } | null>(null);
+  const drag = useRef<{ x: number; y: number } | null>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const [page, setPage] = useState(startPage);
   const [zoom, setZoom] = useState(1.1);
@@ -39,7 +47,10 @@ export function PDFViewer({
       .getPage(page)
       .then((p: any) => {
         if (cancelled) return;
-        const viewport = p.getViewport({ scale: zoom, rotation:(p.rotate+rotation)%360 });
+        const viewport = p.getViewport({
+          scale: zoom,
+          rotation: (p.rotate + rotation) % 360,
+        });
         const c = canvas.current!;
         c.width = viewport.width;
         c.height = viewport.height;
@@ -91,9 +102,61 @@ export function PDFViewer({
       </div>
       {error && <p role="alert">{error}</p>}
       <div className="paper">
-        <div style={{position:'relative',width:'fit-content',margin:'auto'}}>
-        <canvas ref={canvas} style={{touchAction:onCrop?'none':undefined}} onPointerDown={e=>{if(!onCrop)return;const r=e.currentTarget.getBoundingClientRect();drag.current={x:(e.clientX-r.left)/r.width,y:(e.clientY-r.top)/r.height};e.currentTarget.setPointerCapture(e.pointerId);setSelection(null);}} onPointerMove={e=>{if(!drag.current)return;const r=e.currentTarget.getBoundingClientRect();const x=Math.max(0,Math.min(1,(e.clientX-r.left)/r.width)),y=Math.max(0,Math.min(1,(e.clientY-r.top)/r.height));setSelection({x:Math.min(x,drag.current.x),y:Math.min(y,drag.current.y),width:Math.abs(x-drag.current.x),height:Math.abs(y-drag.current.y)});}} onPointerUp={()=>{if(selection&&selection.width>.005&&selection.height>.005)onCrop?.(page,selection);drag.current=null;}}/>
-        {onCrop&&selection&&<div style={{pointerEvents:'none',position:'absolute',left:`${selection.x*100}%`,top:`${selection.y*100}%`,width:`${selection.width*100}%`,height:`${selection.height*100}%`,border:'2px solid #bb7428',background:'#e9ae3630'}}/>}
+        <div
+          style={{ position: "relative", width: "fit-content", margin: "auto" }}
+        >
+          <canvas
+            ref={canvas}
+            style={{ touchAction: onCrop ? "none" : undefined }}
+            onPointerDown={(e) => {
+              if (!onCrop) return;
+              const r = e.currentTarget.getBoundingClientRect();
+              drag.current = {
+                x: (e.clientX - r.left) / r.width,
+                y: (e.clientY - r.top) / r.height,
+              };
+              e.currentTarget.setPointerCapture(e.pointerId);
+              setSelection(null);
+            }}
+            onPointerMove={(e) => {
+              if (!drag.current) return;
+              const r = e.currentTarget.getBoundingClientRect();
+              const x = Math.max(
+                  0,
+                  Math.min(1, (e.clientX - r.left) / r.width),
+                ),
+                y = Math.max(0, Math.min(1, (e.clientY - r.top) / r.height));
+              setSelection({
+                x: Math.min(x, drag.current.x),
+                y: Math.min(y, drag.current.y),
+                width: Math.abs(x - drag.current.x),
+                height: Math.abs(y - drag.current.y),
+              });
+            }}
+            onPointerUp={() => {
+              if (
+                selection &&
+                selection.width > 0.005 &&
+                selection.height > 0.005
+              )
+                onCrop?.(page, selection);
+              drag.current = null;
+            }}
+          />
+          {onCrop && selection && (
+            <div
+              style={{
+                pointerEvents: "none",
+                position: "absolute",
+                left: `${selection.x * 100}%`,
+                top: `${selection.y * 100}%`,
+                width: `${selection.width * 100}%`,
+                height: `${selection.height * 100}%`,
+                border: "2px solid #bb7428",
+                background: "#e9ae3630",
+              }}
+            />
+          )}
         </div>
       </div>
     </section>

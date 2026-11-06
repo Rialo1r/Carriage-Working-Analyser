@@ -1,9 +1,14 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { PDFViewer } from "./PDFViewer";
+import { ExportWorkspace } from "./ExportWorkspace";
 import { TimetableWorkspace } from "./TimetableWorkspace";
-import { RotationWorkspace, StationAnalysis, UnresolvedWorkspace } from "./RotationWorkspace";
-import { DailyTools, FormationWorkspace } from "./ResearchUI";
+import {
+  RotationWorkspace,
+  StationAnalysis,
+  UnresolvedWorkspace,
+} from "./RotationWorkspace";
+import { DailyTools, FormationWorkspace, SearchWorkspace } from "./ResearchUI";
 import { OcrWorkspace } from "./OcrWorkspace";
 import "./style.css";
 
@@ -82,7 +87,7 @@ function Text({
   return (
     <label>
       {label}
-      <textarea name={name} defaultValue={value} />
+      <textarea aria-label={label} name={name} defaultValue={value} />
     </label>
   );
 }
@@ -151,6 +156,12 @@ function App() {
             m.trainNumber,
             m.origin?.name,
             m.destination?.name,
+            ...(m.origin?.aliases || []).map((a: any) => a.name),
+            ...(m.destination?.aliases || []).map((a: any) => a.name),
+            ...(m.calls || []).flatMap((c: any) => [
+              c.station.name,
+              ...(c.station.aliases || []).map((a: any) => a.name),
+            ]),
           ]),
         ]
           .join(" ")
@@ -158,9 +169,11 @@ function App() {
           .includes(search.toLowerCase())) &&
       (!focus ||
         d.movements.some((m: any) =>
-          [m.origin?.name, m.destination?.name].some((n) =>
-            ["York", "Scarborough", "Huttons Ambo"].includes(n),
-          ),
+          [
+            m.origin?.name,
+            m.destination?.name,
+            ...(m.calls || []).map((c: any) => c.station.name),
+          ].some((n) => ["York", "Scarborough", "Huttons Ambo"].includes(n)),
         )),
   );
   const fmt = (n: number | null) =>
@@ -285,9 +298,22 @@ function App() {
             Analyser
           </span>
         </div>
-        <div className="edition">PERSONAL RESEARCH • PHASE 1</div>
+        <div className="edition">PERSONAL RAILWAY RESEARCH</div>
         <nav>
-          {["Dashboard", "Documents", "OCR", "Diagrams", "Formations", "Rotations", "Station Analysis", "Unresolved", "Timetable", "Stations"].map((t) => (
+          {[
+            "Dashboard",
+            "Documents",
+            "OCR",
+            "Diagrams",
+            "Train Movements",
+            "Formations",
+            "Rotations",
+            "Station Analysis",
+            "Unresolved",
+            "Timetable",
+            "Export Centre",
+            "Stations",
+          ].map((t) => (
             <button
               className={tab === t ? "active" : ""}
               key={t}
@@ -308,7 +334,7 @@ function App() {
           Including Huttons Ambo
         </p>
         <p className="muted">
-          OCR, rotation analysis and export follow in later phases.
+          Local OCR · reviewed connections · source-linked exports.
         </p>
       </aside>
       <main>
@@ -323,6 +349,12 @@ function App() {
           </div>
           <span className="badge">Standalone · local storage</span>
         </header>
+        {stats.demoMode && (
+          <div className="demo-banner">
+            SYNTHETIC DEMONSTRATION — all workings are invented for testing, not
+            historical evidence.
+          </div>
+        )}
         {error && (
           <div className="error" role="alert">
             {error}
@@ -333,13 +365,43 @@ function App() {
             {notice}
           </div>
         )}
-        {tab === "Timetable" && <TimetableWorkspace documents={docs} stations={stations} diagrams={diagrams}/>}
-      {tab === "Rotations" && <RotationWorkspace diagrams={diagrams} onOpen={id=>void action(()=>open(id))}/>}
-      {tab === "Station Analysis" && <StationAnalysis stations={stations} onOpen={id=>void action(()=>open(id))}/>}
-      {tab === "Unresolved" && <UnresolvedWorkspace onOpen={id=>void action(()=>open(id))}/>}
-      {tab === "Formations" && <FormationWorkspace diagrams={diagrams}/>}
-      {tab === "OCR" && <OcrWorkspace documents={docs} onOpen={id=>void action(()=>open(id))}/>}
-      {tab === "Dashboard" && (
+        {tab === "Train Movements" && (
+          <SearchWorkspace
+            stations={stations}
+            onOpen={(id) => void action(() => open(id))}
+          />
+        )}
+        {tab === "Export Centre" && <ExportWorkspace diagrams={diagrams} />}
+        {tab === "Timetable" && (
+          <TimetableWorkspace
+            documents={docs}
+            stations={stations}
+            diagrams={diagrams}
+          />
+        )}
+        {tab === "Rotations" && (
+          <RotationWorkspace
+            diagrams={diagrams}
+            onOpen={(id) => void action(() => open(id))}
+          />
+        )}
+        {tab === "Station Analysis" && (
+          <StationAnalysis
+            stations={stations}
+            onOpen={(id) => void action(() => open(id))}
+          />
+        )}
+        {tab === "Unresolved" && (
+          <UnresolvedWorkspace onOpen={(id) => void action(() => open(id))} />
+        )}
+        {tab === "Formations" && <FormationWorkspace diagrams={diagrams} />}
+        {tab === "OCR" && (
+          <OcrWorkspace
+            documents={docs}
+            onOpen={(id) => void action(() => open(id))}
+          />
+        )}
+        {tab === "Dashboard" && (
           <>
             <p className="intro">
               Build a source-backed record of the workings you want to study.
@@ -351,6 +413,9 @@ function App() {
                 ["Diagrams", stats.diagrams],
                 ["Movements", stats.movements],
                 ["Verified diagrams", stats.verified],
+                ["Confirmed rotations", stats.rotations],
+                ["Unresolved connections", stats.unresolved],
+                ["OCR awaiting review", stats.ocrReview],
               ].map(([k, v]) => (
                 <section className="card" key={k}>
                   <span>{k}</span>
@@ -573,12 +638,12 @@ function App() {
                   checked={focus}
                   onChange={(e) => setFocus(e.target.checked)}
                 />
-                York / Scarborough / Huttons Ambo endpoints
+                York / Scarborough / Huttons Ambo workings
               </label>
             </div>
             <p className="muted">
-              This Phase 1 filter checks recorded movement endpoints.
-              Intermediate-call searching follows in Phase 3.
+              This filter checks recorded endpoints and intermediate calls.
+              Missing calls remain unknown.
             </p>
             <div className="grid">
               <section className="panel">
@@ -631,11 +696,34 @@ function App() {
               <span className="badge">{selected.status}</span>
             </p>
             <p className="muted">
-              Physical stock assignment: unknown. This record represents a daily
-              published working, not a permanent physical set.
+              {selected.operations?.some((o: any) => o.assignments.length)
+                ? "Physical stock assignments are recorded for specific operations below."
+                : "No physical stock identity has been assigned."}{" "}
+              This published working can be operated by different stock on
+              different days.
+              {selected.operations?.flatMap((o: any) =>
+                o.assignments.map((a: any) => (
+                  <span key={a.id} style={{ display: "block" }}>
+                    {o.date?.slice(0, 10) || o.scenarioDay || "Date unknown"} ·{" "}
+                    {a.formation.physicalSet?.researchLabel ||
+                      a.formation.description}
+                  </span>
+                )),
+              )}
             </p>
-            <DailyTools key={selected.id+selected.updatedAt} diagramId={selected.id} stations={stations} onEdit={m=>{setEditingMovement(m);document.getElementById("movement-editor")?.scrollIntoView({behavior:"smooth"});}}/>
-<div className="grid">
+            <DailyTools
+              key={selected.id + selected.updatedAt}
+              diagramId={selected.id}
+              onChanged={() => void action(() => open(selected.id))}
+              stations={stations}
+              onEdit={(m) => {
+                setEditingMovement(m);
+                document
+                  .getElementById("movement-editor")
+                  ?.scrollIntoView({ behavior: "smooth" });
+              }}
+            />
+            <div className="grid">
               <section className="panel">
                 <h2>Diagram details</h2>
                 {diagramForm(selected)}

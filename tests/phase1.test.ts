@@ -204,7 +204,7 @@ test("Phase 1 persistence, source integrity, entry, review and isolation", async
         assert.equal(
           (
             await call("PUT", "/diagrams/" + diagramId, {
-              revision: 1,
+              revision: 3,
               title: "Corrected research title",
             })
           ).statusCode,

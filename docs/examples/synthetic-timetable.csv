@@ -1,0 +1,4 @@
+serviceKey,trainNumber,station,sequence,arrival,departure,days,pdfPage,description,originalText
+DEMO-901,901,York,1,,08:10,Monday;Tuesday;Wednesday;Thursday;Friday;Saturday;Sunday,1,SYNTHETIC SOFTWARE TEST ONLY,SYNTHETIC York departure
+DEMO-901,901,Huttons Ambo,2,09:10,09:12,Monday;Tuesday;Wednesday;Thursday;Friday;Saturday;Sunday,1,SYNTHETIC SOFTWARE TEST ONLY,SYNTHETIC intermediate call
+DEMO-901,901,Scarborough,3,10:10,,Monday;Tuesday;Wednesday;Thursday;Friday;Saturday;Sunday,1,SYNTHETIC SOFTWARE TEST ONLY,SYNTHETIC Scarborough arrival

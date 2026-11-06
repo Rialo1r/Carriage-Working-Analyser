@@ -1,10 +1,10 @@
 # Accepted design and scope
 
-Approved: standalone application; immutable source evidence; separation of published diagrams and physical stock; explicit analysis scenarios; manual connection approval; Phase 1 only. One researcher, local personal use, no login system.
+Approved: standalone application; immutable source evidence; separation of published diagrams and physical stock; explicit analysis scenarios; manual connection approval; All phases were subsequently authorised, including a separate synthetic test setup and GitHub publication. One researcher, local personal use, no login system.
 
 Research scope: workings on the York–Scarborough route, including Huttons Ambo. Retaining the whole source document is acceptable; transcription and later analysis should focus on relevant workings.
 
-Phase 1 schema intentionally contains the foundational subset of the approved overall table plan. Later phases add OCR blocks/revisions, full calendars, intermediate calls, composition events, transition constraints, rotations, timetable links and import/export manifests through additive migrations. These are not implemented ahead of their phase.
+The application now includes additive migrations for OCR jobs/revisions, weekday calendars and date exceptions, intermediate calls, composition changes, reviewed transitions, rotations, timetable links and import/export snapshots. Phase checks were run before proceeding to the next phase.
 
 Critical rules for every later phase:
 

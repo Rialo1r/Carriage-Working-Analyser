@@ -92,6 +92,7 @@ model Diagram {
   researchNotes ResearchNote[]
   outgoing DiagramTransition[] @relation("transitionFrom")
   incoming DiagramTransition[] @relation("transitionTo")
+  rotationSteps RotationStep[]
 }
 model Movement {
   id String @id @default(uuid()) @db.Uuid
@@ -306,6 +307,7 @@ model DiagramTransition {
  @@unique([scenarioId, fromId, toId, dayOffset])
 }
 model Rotation {
+ stepRecords RotationStep[]
  id String @id @default(uuid()) @db.Uuid
  scenarioId String @db.Uuid
  scenario AnalysisScenario @relation(fields: [scenarioId], references: [id], onDelete: Restrict)
@@ -373,4 +375,24 @@ model ImportRecord {
  batch ImportBatch @relation(fields: [batchId], references: [id], onDelete: Restrict)
  serviceId String @db.Uuid
  rowKey String
+}
+model ExportBatch {
+ id String @id @default(uuid()) @db.Uuid
+ format String
+ schemaVersion String
+ payload Json
+ warnings Json
+ sha256 String
+ createdAt DateTime @default(now())
+}
+
+model RotationStep {
+ id String @id @default(uuid()) @db.Uuid
+ rotationId String @db.Uuid
+ rotation Rotation @relation(fields: [rotationId], references: [id], onDelete: Restrict)
+ diagramId String @db.Uuid
+ diagram Diagram @relation(fields: [diagramId], references: [id], onDelete: Restrict)
+ sequence Int
+ dayOffset Int
+ @@unique([rotationId, sequence])
 }

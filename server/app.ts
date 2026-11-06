@@ -1,4 +1,5 @@
 import Fastify from "fastify";
+import { registerExports } from "./export-routes.js";
 import { registerTimetable } from "./timetable-routes.js";
 import { registerRotations } from "./rotation-routes.js";
 import { registerDaily } from "./daily-routes.js";
@@ -59,9 +60,20 @@ const movementInput = z.object({
 });
 const diagramInclude = {
   document: true,
+  operations: {
+    include: {
+      assignments: {
+        include: { formation: { include: { physicalSet: true } } },
+      },
+    },
+  },
   movements: {
     orderBy: { sequence: "asc" as const },
-    include: { origin: true, destination: true },
+    include: {
+      origin: { include: { aliases: true } },
+      destination: { include: { aliases: true } },
+      calls: { include: { station: { include: { aliases: true } } } },
+    },
   },
   evidence: { include: { page: { include: { file: true } } } },
   verifications: { orderBy: { createdAt: "desc" as const } },
@@ -108,11 +120,9 @@ export async function buildApp(
         .code(400)
         .send({ error: "Invalid input", details: error.issues });
     if (error instanceof Prisma.PrismaClientKnownRequestError)
-      return reply
-        .code(error.code === "P2025" ? 404 : 409)
-        .send({
-          error: "Record missing or conflicts with existing research data",
-        });
+      return reply.code(error.code === "P2025" ? 404 : 409).send({
+        error: "Record missing or conflicts with existing research data",
+      });
     if (error.statusCode && error.statusCode < 500)
       return reply.code(error.statusCode).send({ error: error.message });
     app.log.error(error);
@@ -131,11 +141,25 @@ export async function buildApp(
     return { status: "ok" };
   });
   app.get("/api/dashboard", async () => ({
+    demoMode: process.env.DEMO_MODE === "true",
     documents: await db.document.count(),
     diagrams: await db.diagram.count(),
     movements: await db.movement.count(),
     verified: await db.diagram.count({
       where: { status: "Verified against source" },
+    }),
+    rotations: await db.rotation.count({ where: { status: "Confirmed" } }),
+    unresolved: await db.diagramTransition.count({
+      where: {
+        OR: [
+          { decision: "Pending" },
+          { kind: "Unresolved gap" },
+          { confidence: "Conflict" },
+        ],
+      },
+    }),
+    ocrReview: await db.ocrJob.count({
+      where: { status: "Completed", revisions: { none: {} } },
     }),
     activity: await db.auditEvent.findMany({
       take: 8,
@@ -175,12 +199,10 @@ export async function buildApp(
     try {
       pdf = await PDFDocument.load(bytes);
     } catch {
-      return reply
-        .code(400)
-        .send({
-          error:
-            "PDF cannot be read. Encrypted or damaged files are not supported.",
-        });
+      return reply.code(400).send({
+        error:
+          "PDF cannot be read. Encrypted or damaged files are not supported.",
+      });
     }
     if (pdf.getPageCount() < 1)
       return reply.code(400).send({ error: "PDF has no pages" });
@@ -259,16 +281,14 @@ export async function buildApp(
         aliases: z.array(z.string().trim().min(1).max(200)).max(30).default([]),
       })
       .parse(req.body);
-    return reply
-      .code(201)
-      .send(
-        await db.station.create({
-          data: {
-            name: data.name,
-            aliases: { create: data.aliases.map((name) => ({ name })) },
-          },
-        }),
-      );
+    return reply.code(201).send(
+      await db.station.create({
+        data: {
+          name: data.name,
+          aliases: { create: data.aliases.map((name) => ({ name })) },
+        },
+      }),
+    );
   });
   app.get("/api/diagrams", async (req) => {
     const q = z
@@ -301,6 +321,12 @@ export async function buildApp(
           m.trainNumber,
           m.origin?.name,
           m.destination?.name,
+          ...m.calls.flatMap((c) => [
+            c.station.name,
+            ...c.station.aliases.map((a) => a.name),
+          ]),
+          ...(m.origin?.aliases.map((a) => a.name) || []),
+          ...(m.destination?.aliases.map((a) => a.name) || []),
         ]),
       ].some((v) => v?.toLowerCase().includes(term)),
     );
@@ -331,7 +357,15 @@ export async function buildApp(
       });
       const after = await tx.diagram.update({
         where: { id: before.id, revision },
-        data: { ...data, revision: { increment: 1 } },
+        data: {
+          ...data,
+          revision: { increment: 1 },
+          ...(["Verified against source", "Ready for export"].includes(
+            before.status,
+          )
+            ? { status: "Needs correction" }
+            : {}),
+        },
       });
       await audit(tx, after.id, "Diagram", "Edited", { before, after });
       return after;
@@ -342,6 +376,10 @@ export async function buildApp(
     const m = await db.$transaction(async (tx) => {
       const m = await tx.movement.create({
         data: { ...data, diagramId: id(req) },
+      });
+      await tx.diagram.update({
+        where: { id: m.diagramId },
+        data: { revision: { increment: 1 }, status: "Needs correction" },
       });
       await audit(tx, m.diagramId, "Diagram", "Movement added", m);
       return m;
@@ -357,6 +395,10 @@ export async function buildApp(
       const after = await tx.movement.update({
         where: { id: before.id },
         data,
+      });
+      await tx.diagram.update({
+        where: { id: after.diagramId },
+        data: { revision: { increment: 1 }, status: "Needs correction" },
       });
       await audit(tx, after.diagramId, "Diagram", "Movement edited", {
         before,
@@ -396,12 +438,10 @@ export async function buildApp(
         ["Verified against source", "Ready for export"].includes(data.status) &&
         !(await tx.evidence.count({ where: { diagramId: id(req) } }))
       )
-        return reply
-          .code(400)
-          .send({
-            error:
-              "Add a source citation before marking this diagram verified or ready for export",
-          });
+        return reply.code(400).send({
+          error:
+            "Add a source citation before marking this diagram verified or ready for export",
+        });
       const d = await tx.diagram.update({
         where: { id: id(req) },
         data: {
@@ -424,6 +464,7 @@ export async function buildApp(
   registerDaily(app, db);
   registerRotations(app, db);
   registerTimetable(app, db);
+  registerExports(app, db);
   if (options.serveWeb !== false) {
     try {
       await access(path.resolve("dist/index.html"));

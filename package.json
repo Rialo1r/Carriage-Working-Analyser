@@ -1,6 +1,6 @@
 {
   "name": "lner-carriage-working-analyser",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -12,7 +12,9 @@
     "db:migrate": "tsx server/migrate.ts",
     "test": "tsx --test --test-concurrency=1 tests/*.test.ts",
     "test:browser": "playwright test",
-    "worker": "tsx server/worker.ts"
+    "worker": "tsx server/worker.ts",
+    "demo:seed": "tsx server/demo-seed.ts",
+    "format": "prettier --write \"server/*.ts\" \"web/*.{tsx,css}\" \"tests/*.ts\" \"*.{ts,json,yaml,md}\" \"docs/*.md\""
   },
   "dependencies": {
     "@fastify/multipart": "^9.0.3",

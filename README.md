@@ -1,64 +1,82 @@
 # LNER Carriage Working Analyser
 
-Standalone, personal research application. **Phase 1 only.** It has its own PostgreSQL database and file volumes and never connects to Railway Operations Manager.
+A standalone, personal research application for digitising historical carriage workings and reconstructing possible multi-day stock rotations. React/TypeScript, Node/TypeScript, PostgreSQL, Prisma, PDF.js, local Tesseract OCR and Docker Compose.
 
-## Run on Windows 11
+**Separate application and database. No connection to Railway Operations Manager. No paid cloud services. Routine operation is offline after installation.**
 
-Install Docker Desktop with Linux containers enabled. From this repository in PowerShell:
+## Download and try the test setup
+
+Download this GitHub repository as a ZIP, extract it, install Docker Desktop for Windows 11 with Linux containers enabled, and open PowerShell in the extracted folder:
 
 ```powershell
-docker compose up -d --build
+docker compose -f compose.demo.yaml up -d --build --wait --wait-timeout 180
 ```
 
-Open `http://localhost:3000` on your own computer. The port is bound to loopback for personal use. The database has no published host port. Local database credentials in Compose are development defaults, not credentials for another application.
+Open `http://localhost:3001` on your computer. The demo includes **fictional** York–Scarborough workings, source PDFs, a three-day rotation, carriage formations and a mismatched 1937 timetable candidate. All are labelled synthetic. It uses separate database and document volumes from your research instance.
 
-After the initial image/dependency downloads, routine use is local and offline. Later starts use `docker compose up -d --no-build`. Stop with `docker compose stop`. Do not use `docker compose down -v`: that removes research volumes.
+[Full test walkthrough](docs/TEST-SETUP.md). Optional PowerShell helpers are in `scripts/`.
 
-## Phase 1 workflow
+## Start your empty research instance
 
-1. Upload an original, unencrypted PDF (maximum 100 MB) under Documents. Titles, source dates, operating periods, regions and descriptions are recorded separately. No historical records are preloaded.
-2. Open the PDF, change page and zoom. Optionally enter printed page labels; PDF pages are always numbered from 1.
-3. Register stations and aliases as encountered in the sources.
-4. Create only the diagrams you want to research. All historical fields can be unknown. A whole source PDF can be retained without transcribing every working.
-5. Add and edit movements. Enter times as `HH:MM`; use `24:20` only when next-day timing is supported. Blank means unknown. Preserve original notation separately. Movement order is manually recorded, not inferred from incomplete times.
-6. Attach page citations, original text, corrected transcription and uncertainty notes. Open a citation to jump to its PDF page. Citations are append-only in this phase; add a clarifying citation if interpretation changes.
-7. Record review status and rationale. Verification/ready-for-export statuses require a citation. The application does not independently authenticate historical claims.
+```powershell
+docker compose up -d --build --wait --wait-timeout 180
+```
 
-The focus is York–Scarborough, including Huttons Ambo. The Phase 1 shortcut filters **recorded endpoints** at York, Scarborough or Huttons Ambo; it is not yet a route inference engine. Intermediate calls and richer route filtering are Phase 3.
+Open `http://localhost:3000`. No historical data is preloaded. Ports bind to loopback for personal use; PostgreSQL is not exposed to the host. This is a single-researcher application without login, intended for a trusted personal machine.
 
-The timetable photos supplied in chat have not been imported. Their visible headings cover Newcastle/Blyth-area routes. Do not identify timetable column numbers as carriage set numbers without evidence. Use the York–Scarborough pages and the relevant carriage roster when available.
+Later starts: `docker compose up -d --no-build --wait`. Stop: `docker compose stop`. Database and original documents persist in named volumes. **Do not use `docker compose down -v` on research data.**
 
-## Domain boundaries
+## Research workflow
 
-`Diagram` is a source-specific published daily working; published numbers are not unique keys. `DiagramOperation` represents a dated/scenario-day instance. `PhysicalSet`, `Formation`, `FormationMember`, `Carriage` and `OperationAssignment` keep physical stock separate from published instructions. Phase 1 provides these foundation tables but no stock-allocation UI or rotation algorithm.
+1. **Documents:** upload an unencrypted PDF up to 100 MB. Record title, source date, operating period, region and description. View/zoom pages and record printed page labels independently of PDF indices.
+2. **OCR:** select only relevant pages. Rotate sideways scans; drag a crop around a table/entry. Choose an OCR layout, queue local recognition, review the rendered crop and raw text, and save corrected transcription revisions. Rules suggest corrections without silently changing evidence. Reruns create separate jobs. Search raw and corrected text for station, train and diagram references.
+3. **Diagrams:** create selected source-linked workings with incomplete fields allowed. Add/edit multiple movements, intermediate station calls, original time notation, operating days, date exceptions, composition requirements and attach/detach instructions. View the timeline, layovers and conflicts. Times are minutes from service-day midnight; explicit next-day times can be entered as `24:20`. Unknown stays unknown.
+4. **Formations:** record carriage types, anonymous quantities or identified vehicles and physical stock research identities. Assign a formation to a dated/scenario-day operation; a diagram number never permanently identifies that stock.
+5. **Rotations:** choose diagrams and an explicit date scenario with documented assumptions. Suggest connections; inspect calendar, station, time, composition and source-period checks. Approve/reject manually with reasons. Confirmed links require a source citation. Missing transfers remain gaps. Build rotations only from approved links; branches, conflicts and unsupported recurrence remain review issues.
+6. **Station Analysis / Unresolved:** inspect starts, finishes, intermediate calls and reviewed/candidate links. York, Scarborough and Huttons Ambo are focus shortcuts. Search also recognises registered aliases.
+7. **Timetable:** enter source-specific services manually, or preview CSV/JSON imports before committing them. Match movement candidates and review route, times, operating days and source dates. Matching 1937/1939 train numbers never automatically merge records.
+8. **Export Centre:** preview verified-only or explicitly unverified research snapshots, then download exactly that JSON/CSV snapshot. Source references, statuses, formations, intermediate calls and rotations are retained. [Future integration contract](docs/INTEGRATION.md).
 
-The 1937 and 1939 sources stay separate. Similar numbers do not merge records. Original PDFs are immutable, UUID-addressed and SHA-256 recorded. Source citations and reviews are retained; no delete endpoints are provided. Important diagram, movement, citation, page-label and review changes are audited. Diagram edits use revisions to reject stale saves.
+Original PDFs remain unchanged and are SHA-256 recorded. Important changes are audited. Material diagram/movement edits invalidate a prior verified state; verification history remains. There are no source-deletion endpoints.
 
-## Development
+### Limits requiring historical review
 
-Use the existing checkout; this cloud task is already isolated. Do not create a worktree unless explicitly requested.
+OCR provides text blocks and confidence, not verified railway facts. Tiny print, ligatures, poor contrast and complex columns can defeat Tesseract. Crop and rotate before recognition; transcribe manually where needed. Layout/extraction assistance creates a draft working from text you select; it does not reconstruct historical stock identities automatically.
 
-Node 22+, npm and PostgreSQL 16 are required. Install using the committed lockfile:
+Calendar analysis supports weekday rules and dated exceptions within a bounded scenario. Conditional historical phrases must be resolved into those rules or retained as uncertainty notes. A recurring circuit requires compatible weekday shifts and checks across the scenario; it is not a claim beyond that period. Missing diagrams or transfers are not invented. Complex splits/joins require explicit formation assignments and composition changes; competing continuations remain unresolved rather than being flattened into one stock path.
+
+Exports are research interchange files, not an implemented Railway Operations Manager importer. Your actual 1937/1939 PDFs have not been supplied for accuracy testing. The Newcastle/Blyth timetable photos in chat have not been imported as York–Scarborough evidence.
+
+## Automated tests
+
+Docker-only test setup:
+
+```powershell
+docker compose build app
+docker compose -f compose.test.yaml up --build --abort-on-container-exit --exit-code-from tests
+docker compose -f compose.test.yaml down
+```
+
+GitHub Actions runs TypeScript/build, PostgreSQL integration, local OCR and Chromium browser tests on pushes/pull requests. See [test setup](docs/TEST-SETUP.md).
+
+## Host development
+
+Node 22+, PostgreSQL 16, Tesseract English and Poppler are required. Use this existing isolated checkout; do not create a worktree unless explicitly requested.
 
 ```sh
 npm ci
-# Set DATABASE_URL to your local development PostgreSQL connection.
 export DATABASE_URL=postgresql://lner:lner_local_only@127.0.0.1:5432/lner
 npm run db:generate
 npm run db:migrate
 npm run build
 npm start
+# In another terminal, with the same DATABASE_URL / STORAGE_DIR:
+npm run worker
 ```
 
-PowerShell uses `$env:DATABASE_URL = 'postgresql://...'` instead of `export`. `.env.example` documents names; scripts do not automatically load `.env`. For live frontend development run `npm run dev` and `npm run web` in separate terminals. Vite proxies API requests to port 3000.
+For live editing, run `npm run dev` and `npm run web`; Vite proxies to port 3000. PowerShell sets variables with `$env:DATABASE_URL = '...'`. `.env.example` documents variables; scripts do not automatically load `.env`.
 
-Prisma 6.19 uses its JavaScript query engine and PostgreSQL driver adapter. Client generation needs DATABASE_URL set, even when generation does not connect to it. `prisma.config.ts` enables the CLI adapter path to avoid unnecessary native engine downloads. No checksum or TLS checks are disabled.
-
-SQL migrations live in `prisma/migrations`. `npm run db:migrate` uses a small transactional PostgreSQL runner with advisory locking and recorded SHA-256 checksums. It runs on every container start and skips previously applied migrations. Do not edit an applied migration: add another migration and update `schema.prisma`, then regenerate the client. Do not mix Prisma Migrate's migration history with this runner. Tests exercise the actual schema through Prisma.
-
-## Tests
-
-Tests need a separate disposable PostgreSQL database whose name ends in `_test`. **They clear research tables in that database.** Never point them at your research database.
+Tests require a separate disposable database ending in `_test`; **tests clear its records**. Never use your research database:
 
 ```sh
 export TEST_DATABASE_URL=postgresql://lner:lner_local_only@127.0.0.1:5432/lner_test
@@ -68,44 +86,35 @@ npx playwright install chromium
 NODE_ENV=test npm run test:browser
 ```
 
-If using an installed Chromium, set `BROWSER_EXECUTABLE_PATH` to its executable. The browser test starts its own server on port 3100. Run integration and browser tests sequentially; both use the disposable database. Synthetic fixtures are explicitly labelled and never enter the main application database.
+An existing Chromium can be selected with `BROWSER_EXECUTABLE_PATH`. Run integration and browser tests sequentially; the browser suites start their own server on port 3100.
 
-The integration checks cover file validation, byte-preserving retrieval, page labels, incomplete records, separate identifiers, referential validation, movement edits, stale saves, citation requirements, audit history and application restart. The browser test covers upload, PDF rendering/page navigation/zoom, manual entry, citations, review and a tablet viewport.
+Prisma 6.19 uses its JavaScript engine and PostgreSQL adapter. CLI generation needs DATABASE_URL even though it does not connect. The CLI adapter path avoids native-engine downloads. Dependency overrides select patched transitive packages; the lockfile is committed. No TLS/checksum checks are disabled.
 
-## Cloud Docker builds
+SQL migrations under `prisma/migrations` run transactionally with an advisory lock and immutable SHA-256 history through `npm run db:migrate`. Do not edit applied migrations or mix Prisma Migrate's history into this runner. Add an additive migration, update `schema.prisma`, regenerate and test it.
 
-The cloud proxy CA must be available during networked build steps:
+## Cloud build proxy
+
+Only in the managed cloud environment, supply its proxy CA as a BuildKit secret:
 
 ```sh
 docker build --secret id=proxy_ca,src="$CODEX_PROXY_CERT" -t lner-analyser:local .
-docker compose up -d --no-build
+docker build --secret id=proxy_ca,src="$CODEX_PROXY_CERT" -f Dockerfile.test -t lner-analyser:tests .
+docker compose -f compose.demo.yaml up -d --no-build --wait
 ```
 
-On Windows without that proxy, the normal Compose build needs no secret. TLS verification remains enabled.
+Normal Windows builds need no proxy secret. Package signatures, checksums and TLS stay enabled.
 
-## Persistence and backup
+## Backup
 
-Named volumes `lner-carriage-analyser_database` and `lner-carriage-analyser_documents` hold database state and original PDFs respectively. Back up both together. Keep the app stopped while making a consistent pair of backups; database service remains running.
-
-Example PowerShell procedure (choose a fresh backup directory, preserving earlier backups):
+Back up both `lner-carriage-analyser_database` and `lner-carriage-analyser_documents`. Stop app and worker while taking a consistent pair; leave PostgreSQL running. Choose a new backup directory:
 
 ```powershell
 New-Item -ItemType Directory -Path backups/research-001
-docker compose stop app
+docker compose stop app worker
 docker compose exec -T db pg_dump -U lner -Fc -f /tmp/lner.dump lner
 docker compose cp db:/tmp/lner.dump backups/research-001/lner.dump
 docker compose cp app:/data backups/research-001/documents
-docker compose start app
+docker compose start app worker
 ```
 
-Using `docker compose cp` avoids binary corruption from older PowerShell output redirection. Test restoration into separate volumes before relying on a backup. The backup/restore workflow has not been validated on a Windows machine in this cloud task.
-
-## Next phases — not implemented
-
-2. Local OCR, source crops, correction rules and transcription revisions.
-3. Intermediate calls, full calendars, daily timelines and composition events.
-4. Reviewed transitions and multi-day stock rotations with explicit gaps/conflicts.
-5. Cross-period timetable candidate matching.
-6. Versioned CSV/JSON export preview and validation.
-
-Phase 1 stops here pending further instructions. No external integration, OCR, historical extraction or rotation claims are included.
+Copying the dump avoids binary corruption from older PowerShell redirection. Test restoring into separate volumes before relying on backups. Windows-specific backup/restore has not been tested in this cloud task.

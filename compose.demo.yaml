@@ -1,0 +1,66 @@
+name: lner-carriage-demo
+services:
+  db:
+    image: postgres:16-bookworm
+    environment:
+      POSTGRES_USER: lner
+      POSTGRES_PASSWORD: lner_demo_only
+      POSTGRES_DB: lner_demo
+    volumes:
+      - demo-database:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U lner -d lner_demo]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+  seed:
+    image: lner-analyser:local
+    build: .
+    command: [npm, run, demo:seed]
+    environment:
+      DATABASE_URL: postgresql://lner:lner_demo_only@db:5432/lner_demo
+      STORAGE_DIR: /data
+      ALLOW_DEMO_SEED: "true"
+    volumes:
+      - demo-documents:/data
+    depends_on:
+      db:
+        condition: service_healthy
+  app:
+    image: lner-analyser:local
+    ports:
+      - "127.0.0.1:3001:3000"
+    environment:
+      DATABASE_URL: postgresql://lner:lner_demo_only@db:5432/lner_demo
+      STORAGE_DIR: /data
+      DEMO_MODE: "true"
+    volumes:
+      - demo-documents:/data
+    healthcheck:
+      test:
+        [
+          CMD,
+          node,
+          -e,
+          "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+  worker:
+    image: lner-analyser:local
+    command: [npm, run, worker]
+    environment:
+      DATABASE_URL: postgresql://lner:lner_demo_only@db:5432/lner_demo
+      STORAGE_DIR: /data
+    volumes:
+      - demo-documents:/data
+    depends_on:
+      app:
+        condition: service_healthy
+volumes:
+  demo-database:
+  demo-documents:

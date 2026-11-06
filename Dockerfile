@@ -15,7 +15,7 @@ COPY --chown=node:node . .
 RUN --mount=type=secret,id=proxy_ca \
     if [ -f /run/secrets/proxy_ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/proxy_ca; fi; \
     DATABASE_URL=postgresql://localhost/lner npm run db:generate && npm run build
-RUN mkdir /data && chown node:node /data
+RUN mkdir /data && chown node:node /data /app
 USER node
 EXPOSE 3000
 CMD ["sh", "-c", "npm run db:migrate && npm start"]

@@ -1,22 +1,348 @@
-import {FastifyInstance} from 'fastify';import {PrismaClient} from '@prisma/client';import {z} from 'zod';import {timeline} from './domain.js';
-const uuid=z.string().uuid(),notes=z.string().max(10000),minute=z.number().int().min(0).max(10079).nullable().optional();
-export const dailyInclude={document:true,calendarRules:true,requirements:true,researchNotes:true,movements:{orderBy:{sequence:'asc' as const},include:{origin:true,destination:true,calls:{orderBy:{sequence:'asc' as const},include:{station:true}},changes:true}},evidence:{include:{page:{include:{file:{include:{document:true}}}}}}};
-export function registerDaily(app:FastifyInstance,db:PrismaClient){
- const id=(req:any)=>uuid.parse(req.params.id);
- const change=async(entityId:string,action:string,fn:(tx:any)=>Promise<any>)=>db.$transaction(async tx=>{const r=await fn(tx);await tx.auditEvent.create({data:{entityId,entityType:'Research',action,detail:JSON.parse(JSON.stringify(r))}});return r;});
- app.get('/api/daily/:id',async req=>{const d=await db.diagram.findUniqueOrThrow({where:{id:id(req)},include:dailyInclude});return {...d,timeline:timeline(d.movements)};});
- app.post('/api/daily/:id/calendar',async req=>{const data=z.object({date:z.iso.date(),operates:z.boolean(),notes:notes.min(1)}).parse(req.body);return change(id(req),'Calendar exception recorded',tx=>tx.calendarRule.upsert({where:{diagramId_date:{diagramId:id(req),date:new Date(data.date)}},create:{...data,date:new Date(data.date),diagramId:id(req)},update:{...data,date:new Date(data.date)}}));});
- app.post('/api/movements/:id/calls',async(req,reply)=>{const data=z.object({stationId:uuid,sequence:z.number().int().positive(),arrivalMinutes:minute,departureMinutes:minute,originalText:notes.default('')}).parse(req.body);const m=await db.movement.findUniqueOrThrow({where:{id:id(req)}});return reply.code(201).send(await change(m.diagramId,'Intermediate call recorded',tx=>tx.movementCall.create({data:{...data,movementId:m.id}})));});
- app.put('/api/calls/:id',async req=>{const data=z.object({stationId:uuid,sequence:z.number().int().positive(),arrivalMinutes:minute,departureMinutes:minute,originalText:notes.default('')}).parse(req.body);const c=await db.movementCall.findUniqueOrThrow({where:{id:id(req)},include:{movement:true}});return change(c.movement.diagramId,'Intermediate call edited',tx=>tx.movementCall.update({where:{id:c.id},data}));});
- app.post('/api/daily/:id/requirements',async req=>{const data=z.object({typeCode:z.string().max(100).nullable().optional(),quantity:z.number().int().positive().nullable().optional(),position:z.number().int().positive().nullable().optional(),notes:notes.default('')}).parse(req.body);return change(id(req),'Published composition recorded',tx=>tx.compositionRequirement.create({data:{...data,diagramId:id(req)}}));});
- app.post('/api/movements/:id/composition',async req=>{const data=z.object({action:z.enum(['Attach','Detach']),typeCode:z.string().max(100).nullable().optional(),quantity:z.number().int().positive().nullable().optional(),afterMovement:z.boolean().default(true),notes:notes.min(1)}).parse(req.body);const m=await db.movement.findUniqueOrThrow({where:{id:id(req)}});return change(m.diagramId,'Composition change recorded',tx=>tx.compositionChange.create({data:{...data,movementId:m.id}}));});
- app.post('/api/daily/:id/notes',async req=>{const data=z.object({text:notes.min(1)}).parse(req.body);return change(id(req),'Research note added',tx=>tx.researchNote.create({data:{...data,diagramId:id(req)}}));});
- app.get('/api/formations',()=>db.formation.findMany({include:{physicalSet:true,members:{include:{type:true,carriage:true}},assignments:{include:{operation:{include:{diagram:true}}}}}}));
- app.get('/api/carriage-types',()=>db.carriageType.findMany());
- app.post('/api/carriage-types',async req=>db.carriageType.create({data:z.object({code:z.string().trim().min(1).max(100),description:notes.optional(),seatingClass:z.string().max(100).optional(),seats:z.number().int().nonnegative().nullable().optional(),brake:z.boolean().nullable().optional(),catering:z.string().max(100).optional(),lengthMetres:z.number().positive().nullable().optional()}).parse(req.body)}));
- app.post('/api/formations',async(req,reply)=>{const data=z.object({description:notes.min(1),physicalSetLabel:z.string().max(200).optional(),members:z.array(z.object({position:z.number().int().positive().nullable().optional(),quantity:z.number().int().positive().nullable().optional(),typeId:uuid.nullable().optional(),vehicleNumber:z.string().max(100).optional()})).max(100)}).parse(req.body);return reply.code(201).send(await db.$transaction(async tx=>tx.formation.create({data:{description:data.description,...(data.physicalSetLabel?{physicalSet:{create:{researchLabel:data.physicalSetLabel}}}:{}),members:{create:data.members.map(m=>({position:m.position,quantity:m.quantity,typeId:m.typeId,...(m.vehicleNumber?{carriage:{create:{publishedNumber:m.vehicleNumber,typeId:m.typeId}}}:{})}))}},include:{members:true}})));});
- app.post('/api/daily/:id/assignments',async req=>{const data=z.object({formationId:uuid,date:z.iso.date().optional(),scenarioDay:z.string().max(200).optional(),notes:notes.min(1)}).refine(d=>!!d.date||!!d.scenarioDay,'Provide date or scenario day').parse(req.body);return change(id(req),'Physical formation assigned to operation',tx=>tx.diagramOperation.create({data:{diagramId:id(req),date:data.date?new Date(data.date):null,scenarioDay:data.scenarioDay,assignments:{create:{formationId:data.formationId,notes:data.notes}}},include:{assignments:true}}));});
- app.get('/api/research-search',async req=>{
-  const q=z.object({q:z.string().max(200).default(''),station:uuid.optional(),from:uuid.optional(),to:uuid.optional(),day:z.string().optional(),formation:uuid.optional()}).parse(req.query);const diagrams=await db.diagram.findMany({include:{...dailyInclude,operations:{include:{assignments:true}}}});const term=q.q.toLowerCase();return diagrams.filter(d=>(!q.day||d.operatingDays.includes(q.day))&&(!q.formation||d.operations.some(o=>o.assignments.some(a=>a.formationId===q.formation)))&&(!q.station||d.movements.some(m=>m.originId===q.station||m.destinationId===q.station||m.calls.some(c=>c.stationId===q.station)))&&(!q.from||d.movements.some(m=>m.originId===q.from))&&(!q.to||d.movements.some(m=>m.destinationId===q.to))) .filter(d=>!term||[d.publishedNumber,d.title,d.notes,...d.movements.flatMap(m=>[m.trainNumber,m.origin?.name,m.destination?.name,...m.calls.map(c=>c.station.name)])].some(v=>v?.toLowerCase().includes(term)));
- });
+import { FastifyInstance } from "fastify";
+import { PrismaClient } from "@prisma/client";
+import { z } from "zod";
+import { stockConflicts, timeline } from "./domain.js";
+const uuid = z.string().uuid(),
+  notes = z.string().max(10000),
+  minute = z.number().int().min(0).max(10079).nullable().optional();
+export const dailyInclude = {
+  document: true,
+  calendarRules: true,
+  requirements: true,
+  researchNotes: true,
+  movements: {
+    orderBy: { sequence: "asc" as const },
+    include: {
+      origin: { include: { aliases: true } },
+      destination: { include: { aliases: true } },
+      calls: {
+        orderBy: { sequence: "asc" as const },
+        include: { station: { include: { aliases: true } } },
+      },
+      changes: true,
+    },
+  },
+  evidence: {
+    include: { page: { include: { file: { include: { document: true } } } } },
+  },
+};
+export function registerDaily(app: FastifyInstance, db: PrismaClient) {
+  const id = (req: any) => uuid.parse(req.params.id);
+  const change = async (
+    entityId: string,
+    action: string,
+    fn: (tx: any) => Promise<any>,
+  ) =>
+    db.$transaction(async (tx) => {
+      const r = await fn(tx);
+      if (
+        ![
+          "Research note added",
+          "Physical formation assigned to operation",
+        ].includes(action)
+      )
+        await tx.diagram.update({
+          where: { id: entityId },
+          data: { revision: { increment: 1 }, status: "Needs correction" },
+        });
+      await tx.auditEvent.create({
+        data: {
+          entityId,
+          entityType: "Research",
+          action,
+          detail: JSON.parse(JSON.stringify(r)),
+        },
+      });
+      return r;
+    });
+  app.get("/api/daily/:id", async (req) => {
+    const d = await db.diagram.findUniqueOrThrow({
+      where: { id: id(req) },
+      include: dailyInclude,
+    });
+    return { ...d, timeline: timeline(d.movements) };
+  });
+  app.post("/api/daily/:id/calendar", async (req) => {
+    const data = z
+      .object({
+        date: z.iso.date(),
+        operates: z.boolean(),
+        notes: notes.min(1),
+      })
+      .parse(req.body);
+    return change(id(req), "Calendar exception recorded", (tx) =>
+      tx.calendarRule.upsert({
+        where: {
+          diagramId_date: { diagramId: id(req), date: new Date(data.date) },
+        },
+        create: { ...data, date: new Date(data.date), diagramId: id(req) },
+        update: { ...data, date: new Date(data.date) },
+      }),
+    );
+  });
+  app.post("/api/movements/:id/calls", async (req, reply) => {
+    const data = z
+      .object({
+        stationId: uuid,
+        sequence: z.number().int().positive(),
+        arrivalMinutes: minute,
+        departureMinutes: minute,
+        originalText: notes.default(""),
+      })
+      .parse(req.body);
+    const m = await db.movement.findUniqueOrThrow({ where: { id: id(req) } });
+    return reply
+      .code(201)
+      .send(
+        await change(m.diagramId, "Intermediate call recorded", (tx) =>
+          tx.movementCall.create({ data: { ...data, movementId: m.id } }),
+        ),
+      );
+  });
+  app.put("/api/calls/:id", async (req) => {
+    const data = z
+      .object({
+        stationId: uuid,
+        sequence: z.number().int().positive(),
+        arrivalMinutes: minute,
+        departureMinutes: minute,
+        originalText: notes.default(""),
+      })
+      .parse(req.body);
+    const c = await db.movementCall.findUniqueOrThrow({
+      where: { id: id(req) },
+      include: { movement: true },
+    });
+    return change(c.movement.diagramId, "Intermediate call edited", (tx) =>
+      tx.movementCall.update({ where: { id: c.id }, data }),
+    );
+  });
+  app.post("/api/daily/:id/requirements", async (req) => {
+    const data = z
+      .object({
+        typeCode: z.string().max(100).nullable().optional(),
+        quantity: z.number().int().positive().nullable().optional(),
+        position: z.number().int().positive().nullable().optional(),
+        notes: notes.default(""),
+      })
+      .parse(req.body);
+    return change(id(req), "Published composition recorded", (tx) =>
+      tx.compositionRequirement.create({
+        data: { ...data, diagramId: id(req) },
+      }),
+    );
+  });
+  app.post("/api/movements/:id/composition", async (req) => {
+    const data = z
+      .object({
+        action: z.enum(["Attach", "Detach"]),
+        typeCode: z.string().max(100).nullable().optional(),
+        quantity: z.number().int().positive().nullable().optional(),
+        afterMovement: z.boolean().default(true),
+        notes: notes.min(1),
+      })
+      .parse(req.body);
+    const m = await db.movement.findUniqueOrThrow({ where: { id: id(req) } });
+    return change(m.diagramId, "Composition change recorded", (tx) =>
+      tx.compositionChange.create({ data: { ...data, movementId: m.id } }),
+    );
+  });
+  app.post("/api/daily/:id/notes", async (req) => {
+    const data = z.object({ text: notes.min(1) }).parse(req.body);
+    return change(id(req), "Research note added", (tx) =>
+      tx.researchNote.create({ data: { ...data, diagramId: id(req) } }),
+    );
+  });
+  app.get("/api/formations", () =>
+    db.formation.findMany({
+      include: {
+        physicalSet: true,
+        members: { include: { type: true, carriage: true } },
+        assignments: { include: { operation: { include: { diagram: true } } } },
+      },
+    }),
+  );
+  app.get("/api/formation-conflicts", async () =>
+    stockConflicts(
+      await db.formation.findMany({
+        include: {
+          assignments: {
+            include: {
+              operation: {
+                include: { diagram: { include: { movements: true } } },
+              },
+            },
+          },
+        },
+      }),
+    ),
+  );
+  app.get("/api/carriage-types", () => db.carriageType.findMany());
+  app.post("/api/carriage-types", async (req) =>
+    db.carriageType.create({
+      data: z
+        .object({
+          code: z.string().trim().min(1).max(100),
+          description: notes.optional(),
+          seatingClass: z.string().max(100).optional(),
+          seats: z.number().int().nonnegative().nullable().optional(),
+          brake: z.boolean().nullable().optional(),
+          catering: z.string().max(100).optional(),
+          lengthMetres: z.number().positive().nullable().optional(),
+        })
+        .parse(req.body),
+    }),
+  );
+  app.post("/api/formations", async (req, reply) => {
+    const data = z
+      .object({
+        description: notes.min(1),
+        physicalSetLabel: z.string().max(200).optional(),
+        physicalSetId: uuid.optional(),
+        members: z
+          .array(
+            z
+              .object({
+                position: z.number().int().positive().nullable().optional(),
+                quantity: z.number().int().positive().nullable().optional(),
+                typeId: uuid.nullable().optional(),
+                vehicleNumber: z.string().max(100).optional(),
+                carriageId: uuid.optional(),
+              })
+              .refine(
+                (m) =>
+                  !(m.carriageId && m.vehicleNumber) &&
+                  (!(m.carriageId || m.vehicleNumber) ||
+                    m.quantity == null ||
+                    m.quantity === 1),
+                "An identified vehicle has quantity one; select an existing vehicle or enter a new number, not both",
+              ),
+          )
+          .max(100),
+      })
+      .parse(req.body);
+    return reply.code(201).send(
+      await db.$transaction(async (tx) =>
+        tx.formation.create({
+          data: {
+            description: data.description,
+            ...(data.physicalSetId
+              ? { physicalSet: { connect: { id: data.physicalSetId } } }
+              : data.physicalSetLabel
+                ? {
+                    physicalSet: {
+                      create: { researchLabel: data.physicalSetLabel },
+                    },
+                  }
+                : {}),
+            members: {
+              create: data.members.map((m) => ({
+                position: m.position,
+                quantity: m.quantity,
+                ...(m.typeId ? { type: { connect: { id: m.typeId } } } : {}),
+                ...(m.carriageId
+                  ? { carriage: { connect: { id: m.carriageId } } }
+                  : {}),
+                ...(m.vehicleNumber
+                  ? {
+                      carriage: {
+                        create: {
+                          publishedNumber: m.vehicleNumber,
+                          typeId: m.typeId,
+                        },
+                      },
+                    }
+                  : {}),
+              })),
+            },
+          },
+          include: { members: true },
+        }),
+      ),
+    );
+  });
+  app.post("/api/daily/:id/assignments", async (req) => {
+    const data = z
+      .object({
+        formationId: uuid,
+        date: z.iso.date().optional(),
+        scenarioDay: z.string().max(200).optional(),
+        notes: notes.min(1),
+      })
+      .refine(
+        (d) => !!d.date || !!d.scenarioDay,
+        "Provide date or scenario day",
+      )
+      .parse(req.body);
+    return change(id(req), "Physical formation assigned to operation", (tx) =>
+      tx.diagramOperation.create({
+        data: {
+          diagramId: id(req),
+          date: data.date ? new Date(data.date) : null,
+          scenarioDay: data.scenarioDay,
+          assignments: {
+            create: { formationId: data.formationId, notes: data.notes },
+          },
+        },
+        include: { assignments: true },
+      }),
+    );
+  });
+  app.get("/api/research-search", async (req) => {
+    const q = z
+      .object({
+        q: z.string().max(200).default(""),
+        station: uuid.optional(),
+        from: uuid.optional(),
+        to: uuid.optional(),
+        day: z.string().optional(),
+        formation: uuid.optional(),
+      })
+      .parse(req.query);
+    const diagrams = await db.diagram.findMany({
+      include: {
+        ...dailyInclude,
+        operations: { include: { assignments: true } },
+      },
+    });
+    const term = q.q.toLowerCase();
+    return diagrams
+      .filter(
+        (d) =>
+          (!q.day || d.operatingDays.includes(q.day)) &&
+          (!q.formation ||
+            d.operations.some((o) =>
+              o.assignments.some((a) => a.formationId === q.formation),
+            )) &&
+          (!q.station ||
+            d.movements.some(
+              (m) =>
+                m.originId === q.station ||
+                m.destinationId === q.station ||
+                m.calls.some((c) => c.stationId === q.station),
+            )) &&
+          (!q.from || d.movements.some((m) => m.originId === q.from)) &&
+          (!q.to || d.movements.some((m) => m.destinationId === q.to)),
+      )
+      .filter(
+        (d) =>
+          !term ||
+          [
+            d.publishedNumber,
+            d.title,
+            d.notes,
+            ...d.movements.flatMap((m) => [
+              m.trainNumber,
+              m.origin?.name,
+              m.destination?.name,
+              ...m.calls.flatMap((c) => [
+                c.station.name,
+                ...c.station.aliases.map((a) => a.name),
+              ]),
+              ...(m.origin?.aliases.map((a) => a.name) || []),
+              ...(m.destination?.aliases.map((a) => a.name) || []),
+            ]),
+          ].some((v) => v?.toLowerCase().includes(term)),
+      );
+  });
 }

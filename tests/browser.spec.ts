@@ -46,13 +46,11 @@ test("personal research workflow: upload, zoom, source citation, manual entry an
   pdf.addPage([300, 400]);
   pdf.addPage([300, 400]);
   const bytes = Buffer.from(await pdf.save());
-  await page
-    .getByLabel("Original scanned PDF")
-    .setInputFiles({
-      name: "fixture.pdf",
-      mimeType: "application/pdf",
-      buffer: bytes,
-    });
+  await page.getByLabel("Original scanned PDF").setInputFiles({
+    name: "fixture.pdf",
+    mimeType: "application/pdf",
+    buffer: bytes,
+  });
   await page.getByRole("button", { name: "Upload PDF", exact: true }).click();
   await expect(page.getByText("2 pages · original preserved")).toBeVisible();
   await page.getByRole("button", { name: "View PDF", exact: true }).click();

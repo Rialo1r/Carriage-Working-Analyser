@@ -1,4 +1,120 @@
-import {test} from 'node:test';import assert from 'node:assert/strict';import {buildApp} from '../server/app.js';import {migrate} from '../server/migrate.js';import {parseCsv} from '../server/domain.js';
-test('Phase 5 separate source years, candidate discrepancies, manual review and preview import',async()=>{const url=process.env.TEST_DATABASE_URL!;assert.match(new URL(url).pathname,/_test$/);await migrate(url);const {app,db}=await buildApp({databaseUrl:url,serveWeb:false});try{const roster=await db.document.create({data:{title:'Synthetic 1939 roster',sourceDate:'1939'}}),timetable=await db.document.create({data:{title:'Synthetic 1937 timetable',sourceDate:'1937'}});const station=await db.station.create({data:{name:'Synthetic timetable station '+roster.id}});const d=await db.diagram.create({data:{documentId:roster.id,publishedNumber:'TEST',movements:{create:{sequence:1,trainNumber:'123',originId:station.id,destinationId:station.id,departureMinutes:100,arrivalMinutes:200}}},include:{movements:true}});const service=await app.inject({method:'POST',url:'/api/services',payload:{documentId:timetable.id,publishedNumber:'123',entries:[{stationId:station.id,sequence:1,departureMinutes:110},{stationId:station.id,sequence:2,arrivalMinutes:200}]}});assert.equal(service.statusCode,201);const candidates=(await app.inject({url:`/api/movements/${d.movements[0].id}/service-candidates`})).json();assert.equal(candidates.length,1);assert.match(candidates[0].discrepancies.join(' '),/1939.*1937/);assert.equal(candidates[0].link,undefined);assert.equal((await app.inject({method:'POST',url:`/api/movements/${d.movements[0].id}/service-links`,payload:{serviceId:service.json().id,decision:'Rejected',notes:'Cross-year identity unproven'}})).statusCode,200);assert.equal((await db.movementServiceLink.findFirstOrThrow({where:{serviceId:service.json().id}})).decision,'Rejected');
-const preview=await app.inject({method:'POST',url:'/api/imports/preview',payload:{documentId:timetable.id,format:'CSV',text:`trainNumber,station,sequence,departure\n124,${station.name},1,09:30\n`}});assert.equal(preview.statusCode,201);assert.deepEqual(preview.json().issues,[]);assert.equal((await app.inject({method:'POST',url:'/api/imports/'+preview.json().id+'/commit',payload:{}})).statusCode,200);assert.equal((await app.inject({method:'POST',url:'/api/imports/'+preview.json().id+'/commit',payload:{}})).statusCode,409);assert.deepEqual(parseCsv('a,b\n"x,y","a""b"'),[['a','b'],['x,y','a"b']]);assert.throws(()=>parseCsv('a,"unterminated'));
-}finally{await app.close();}});
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { buildApp } from "../server/app.js";
+import { migrate } from "../server/migrate.js";
+import { parseCsv } from "../server/domain.js";
+test("Phase 5 separate source years, candidate discrepancies, manual review and preview import", async () => {
+  const url = process.env.TEST_DATABASE_URL!;
+  assert.match(new URL(url).pathname, /_test$/);
+  await migrate(url);
+  const { app, db } = await buildApp({ databaseUrl: url, serveWeb: false });
+  try {
+    const roster = await db.document.create({
+        data: { title: "Synthetic 1939 roster", sourceDate: "1939" },
+      }),
+      timetable = await db.document.create({
+        data: { title: "Synthetic 1937 timetable", sourceDate: "1937" },
+      });
+    const station = await db.station.create({
+      data: { name: "Synthetic timetable station " + roster.id },
+    });
+    const d = await db.diagram.create({
+      data: {
+        documentId: roster.id,
+        publishedNumber: "TEST",
+        movements: {
+          create: {
+            sequence: 1,
+            trainNumber: "123",
+            originId: station.id,
+            destinationId: station.id,
+            departureMinutes: 100,
+            arrivalMinutes: 200,
+          },
+        },
+      },
+      include: { movements: true },
+    });
+    const service = await app.inject({
+      method: "POST",
+      url: "/api/services",
+      payload: {
+        documentId: timetable.id,
+        publishedNumber: "123",
+        entries: [
+          { stationId: station.id, sequence: 1, departureMinutes: 110 },
+          { stationId: station.id, sequence: 2, arrivalMinutes: 200 },
+        ],
+      },
+    });
+    assert.equal(service.statusCode, 201);
+    const candidates = (
+      await app.inject({
+        url: `/api/movements/${d.movements[0].id}/service-candidates`,
+      })
+    ).json();
+    assert.equal(candidates.length, 1);
+    assert.match(candidates[0].discrepancies.join(" "), /1939.*1937/);
+    assert.equal(candidates[0].link, undefined);
+    assert.equal(
+      (
+        await app.inject({
+          method: "POST",
+          url: `/api/movements/${d.movements[0].id}/service-links`,
+          payload: {
+            serviceId: service.json().id,
+            decision: "Rejected",
+            notes: "Cross-year identity unproven",
+          },
+        })
+      ).statusCode,
+      200,
+    );
+    assert.equal(
+      (
+        await db.movementServiceLink.findFirstOrThrow({
+          where: { serviceId: service.json().id },
+        })
+      ).decision,
+      "Rejected",
+    );
+    const preview = await app.inject({
+      method: "POST",
+      url: "/api/imports/preview",
+      payload: {
+        documentId: timetable.id,
+        format: "CSV",
+        text: `trainNumber,station,sequence,departure\n124,${station.name},1,09:30\n`,
+      },
+    });
+    assert.equal(preview.statusCode, 201);
+    assert.deepEqual(preview.json().issues, []);
+    assert.equal(
+      (
+        await app.inject({
+          method: "POST",
+          url: "/api/imports/" + preview.json().id + "/commit",
+          payload: {},
+        })
+      ).statusCode,
+      200,
+    );
+    assert.equal(
+      (
+        await app.inject({
+          method: "POST",
+          url: "/api/imports/" + preview.json().id + "/commit",
+          payload: {},
+        })
+      ).statusCode,
+      409,
+    );
+    assert.deepEqual(parseCsv('a,b\n"x,y","a""b"'), [
+      ["a", "b"],
+      ["x,y", 'a"b'],
+    ]);
+    assert.throws(() => parseCsv('a,"unterminated'));
+  } finally {
+    await app.close();
+  }
+});
