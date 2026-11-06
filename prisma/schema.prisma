@@ -16,6 +16,7 @@ model Document {
   createdAt DateTime @default(now())
   files DocumentFile[]
   diagrams Diagram[]
+  services TrainService[]
 }
 model DocumentFile {
   id String @id @default(uuid()) @db.Uuid
@@ -57,6 +58,7 @@ model Station {
   origins Movement[] @relation("origin")
   destinations Movement[] @relation("destination")
   calls MovementCall[]
+  timetableEntries TimetableEntry[]
 }
 model StationAlias {
   id String @id @default(uuid()) @db.Uuid
@@ -107,6 +109,7 @@ model Movement {
   activity String @default("Unknown")
   notes String @default("")
   calls MovementCall[]
+  serviceLinks MovementServiceLink[]
   changes CompositionChange[]
   @@unique([diagramId, sequence])
 }
@@ -314,4 +317,60 @@ model Rotation {
  status String
  notes String
  createdAt DateTime @default(now())
+}
+
+model TrainService {
+ id String @id @default(uuid()) @db.Uuid
+ documentId String @db.Uuid
+ document Document @relation(fields: [documentId], references: [id], onDelete: Restrict)
+ publishedNumber String?
+ description String @default("")
+ operatingDays String[] @default([])
+ notes String @default("")
+ createdAt DateTime @default(now())
+ entries TimetableEntry[]
+ links MovementServiceLink[]
+}
+model TimetableEntry {
+ id String @id @default(uuid()) @db.Uuid
+ serviceId String @db.Uuid
+ service TrainService @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+ stationId String @db.Uuid
+ station Station @relation(fields: [stationId], references: [id], onDelete: Restrict)
+ sequence Int
+ arrivalMinutes Int?
+ departureMinutes Int?
+ pageId String? @db.Uuid
+ originalText String @default("")
+ @@unique([serviceId, sequence])
+}
+model MovementServiceLink {
+ id String @id @default(uuid()) @db.Uuid
+ movementId String @db.Uuid
+ movement Movement @relation(fields: [movementId], references: [id], onDelete: Restrict)
+ serviceId String @db.Uuid
+ service TrainService @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+ decision String @default("Pending")
+ discrepancies Json
+ notes String @default("")
+ createdAt DateTime @default(now())
+ @@unique([movementId, serviceId])
+}
+model ImportBatch {
+ id String @id @default(uuid()) @db.Uuid
+ documentId String @db.Uuid
+ format String
+ payload Json
+ issues Json
+ status String @default("Preview")
+ createdAt DateTime @default(now())
+ committedAt DateTime?
+ records ImportRecord[]
+}
+model ImportRecord {
+ id String @id @default(uuid()) @db.Uuid
+ batchId String @db.Uuid
+ batch ImportBatch @relation(fields: [batchId], references: [id], onDelete: Restrict)
+ serviceId String @db.Uuid
+ rowKey String
 }

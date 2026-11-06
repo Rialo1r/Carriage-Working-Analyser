@@ -1,4 +1,5 @@
 import Fastify from "fastify";
+import { registerTimetable } from "./timetable-routes.js";
 import { registerRotations } from "./rotation-routes.js";
 import { registerDaily } from "./daily-routes.js";
 import { registerOcr } from "./ocr-routes.js";
@@ -422,6 +423,7 @@ export async function buildApp(
   registerOcr(app, db, storage);
   registerDaily(app, db);
   registerRotations(app, db);
+  registerTimetable(app, db);
   if (options.serveWeb !== false) {
     try {
       await access(path.resolve("dist/index.html"));
