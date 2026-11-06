@@ -1,4 +1,5 @@
 import Fastify from "fastify";
+import { registerDaily } from "./daily-routes.js";
 import { registerOcr } from "./ocr-routes.js";
 import multipart from "@fastify/multipart";
 import staticFiles from "@fastify/static";
@@ -418,6 +419,7 @@ export async function buildApp(
     }),
   );
   registerOcr(app, db, storage);
+  registerDaily(app, db);
   if (options.serveWeb !== false) {
     try {
       await access(path.resolve("dist/index.html"));

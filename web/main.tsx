@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { PDFViewer } from "./PDFViewer";
+import { DailyTools, FormationWorkspace } from "./ResearchUI";
 import { OcrWorkspace } from "./OcrWorkspace";
 import "./style.css";
 
@@ -284,7 +285,7 @@ function App() {
         </div>
         <div className="edition">PERSONAL RESEARCH • PHASE 1</div>
         <nav>
-          {["Dashboard", "Documents", "OCR", "Diagrams", "Stations"].map((t) => (
+          {["Dashboard", "Documents", "OCR", "Diagrams", "Formations", "Stations"].map((t) => (
             <button
               className={tab === t ? "active" : ""}
               key={t}
@@ -330,7 +331,8 @@ function App() {
             {notice}
           </div>
         )}
-        {tab === "OCR" && <OcrWorkspace documents={docs} onOpen={id=>void action(()=>open(id))}/>}
+        {tab === "Formations" && <FormationWorkspace diagrams={diagrams}/>}
+      {tab === "OCR" && <OcrWorkspace documents={docs} onOpen={id=>void action(()=>open(id))}/>}
       {tab === "Dashboard" && (
           <>
             <p className="intro">
@@ -626,13 +628,14 @@ function App() {
               Physical stock assignment: unknown. This record represents a daily
               published working, not a permanent physical set.
             </p>
-            <div className="grid">
+            <DailyTools key={selected.id+selected.updatedAt} diagramId={selected.id} stations={stations} onEdit={m=>{setEditingMovement(m);document.getElementById("movement-editor")?.scrollIntoView({behavior:"smooth"});}}/>
+<div className="grid">
               <section className="panel">
                 <h2>Diagram details</h2>
                 {diagramForm(selected)}
               </section>
               <section className="panel">
-                <h2>Train movements</h2>
+                <h2 id="movement-editor">Train movements</h2>
                 <div className="tablewrap">
                   <table>
                     <thead>

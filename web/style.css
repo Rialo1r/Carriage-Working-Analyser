@@ -386,3 +386,4 @@ summary {
   }
 }
 .source-crop{max-width:100%;max-height:650px;object-fit:contain;border:1px solid #c5d0c5}.transcript{white-space:pre-wrap;overflow-wrap:anywhere;background:#f1f2eb;padding:16px;font-size:13px}.large{min-height:300px}
+.timeline-axis{display:flex;justify-content:space-between;font-size:12px;background:#e3e9df;padding:12px}.timeline-row{display:flex;align-items:center;gap:12px;margin:8px 0}.timeline-row>button{width:240px;flex-shrink:0;text-align:left}.timeline-track{position:relative;height:35px;flex:1;background:repeating-linear-gradient(90deg,#eef0e9 0,#eef0e9 4%,#d1d9ce 4.1%,#eef0e9 4.2%)}.timeline-bar{position:absolute;top:2px;height:28px;margin:0;background:#44785d;min-width:4px;padding:0;border:0}.conflict{color:#a43a28;background:#fff0e9;padding:8px}.member{border:1px solid #d4dece;padding:12px;margin:12px 0}

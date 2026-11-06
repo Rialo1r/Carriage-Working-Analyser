@@ -56,6 +56,7 @@ model Station {
   aliases StationAlias[]
   origins Movement[] @relation("origin")
   destinations Movement[] @relation("destination")
+  calls MovementCall[]
 }
 model StationAlias {
   id String @id @default(uuid()) @db.Uuid
@@ -84,6 +85,9 @@ model Diagram {
   evidence Evidence[]
   operations DiagramOperation[]
   verifications Verification[]
+  calendarRules CalendarRule[]
+  requirements CompositionRequirement[]
+  researchNotes ResearchNote[]
 }
 model Movement {
   id String @id @default(uuid()) @db.Uuid
@@ -100,6 +104,8 @@ model Movement {
   originalTimeText String @default("")
   activity String @default("Unknown")
   notes String @default("")
+  calls MovementCall[]
+  changes CompositionChange[]
   @@unique([diagramId, sequence])
 }
 model PhysicalSet {
@@ -120,6 +126,11 @@ model CarriageType {
   id String @id @default(uuid()) @db.Uuid
   code String
   description String?
+  seatingClass String?
+  seats Int?
+  brake Boolean?
+  catering String?
+  lengthMetres Float?
   carriages Carriage[]
   members FormationMember[]
 }
@@ -208,4 +219,52 @@ model CorrectionRule {
  replacement String
  enabled Boolean @default(true)
  notes String @default("")
+}
+
+model CalendarRule {
+ id String @id @default(uuid()) @db.Uuid
+ diagramId String @db.Uuid
+ diagram Diagram @relation(fields: [diagramId], references: [id], onDelete: Restrict)
+ date DateTime @db.Date
+ operates Boolean
+ notes String
+ @@unique([diagramId, date])
+}
+model MovementCall {
+ id String @id @default(uuid()) @db.Uuid
+ movementId String @db.Uuid
+ movement Movement @relation(fields: [movementId], references: [id], onDelete: Restrict)
+ stationId String @db.Uuid
+ station Station @relation(fields: [stationId], references: [id], onDelete: Restrict)
+ sequence Int
+ arrivalMinutes Int?
+ departureMinutes Int?
+ originalText String @default("")
+ @@unique([movementId, sequence])
+}
+model CompositionRequirement {
+ id String @id @default(uuid()) @db.Uuid
+ diagramId String @db.Uuid
+ diagram Diagram @relation(fields: [diagramId], references: [id], onDelete: Restrict)
+ typeCode String?
+ quantity Int?
+ position Int?
+ notes String @default("")
+}
+model CompositionChange {
+ id String @id @default(uuid()) @db.Uuid
+ movementId String @db.Uuid
+ movement Movement @relation(fields: [movementId], references: [id], onDelete: Restrict)
+ afterMovement Boolean @default(true)
+ action String
+ typeCode String?
+ quantity Int?
+ notes String
+}
+model ResearchNote {
+ id String @id @default(uuid()) @db.Uuid
+ diagramId String @db.Uuid
+ diagram Diagram @relation(fields: [diagramId], references: [id], onDelete: Restrict)
+ text String
+ createdAt DateTime @default(now())
 }
