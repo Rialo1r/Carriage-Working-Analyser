@@ -1,0 +1,175 @@
+generator client {
+  provider = "prisma-client-js"
+  engineType = "client"
+}
+datasource db {
+  provider = "postgresql"
+  url = env("DATABASE_URL")
+}
+model Document {
+  id String @id @default(uuid()) @db.Uuid
+  title String
+  sourceDate String?
+  operatingPeriod String?
+  region String?
+  description String?
+  createdAt DateTime @default(now())
+  files DocumentFile[]
+  diagrams Diagram[]
+}
+model DocumentFile {
+  id String @id @default(uuid()) @db.Uuid
+  documentId String @db.Uuid
+  document Document @relation(fields: [documentId], references: [id], onDelete: Restrict)
+  originalName String
+  storageKey String @unique
+  sha256 String
+  size Int
+  pageCount Int
+  createdAt DateTime @default(now())
+  pages DocumentPage[]
+}
+model DocumentPage {
+  id String @id @default(uuid()) @db.Uuid
+  fileId String @db.Uuid
+  file DocumentFile @relation(fields: [fileId], references: [id], onDelete: Restrict)
+  pdfPage Int
+  printedLabel String?
+  evidence Evidence[]
+  @@unique([fileId, pdfPage])
+}
+model Evidence {
+  id String @id @default(uuid()) @db.Uuid
+  pageId String @db.Uuid
+  page DocumentPage @relation(fields: [pageId], references: [id], onDelete: Restrict)
+  diagramId String @db.Uuid
+  diagram Diagram @relation(fields: [diagramId], references: [id], onDelete: Restrict)
+  originalText String @default("")
+  transcription String @default("")
+  notes String @default("")
+  createdAt DateTime @default(now())
+}
+model Station {
+  id String @id @default(uuid()) @db.Uuid
+  name String @unique
+  aliases StationAlias[]
+  origins Movement[] @relation("origin")
+  destinations Movement[] @relation("destination")
+}
+model StationAlias {
+  id String @id @default(uuid()) @db.Uuid
+  stationId String @db.Uuid
+  station Station @relation(fields: [stationId], references: [id], onDelete: Restrict)
+  name String
+  @@unique([stationId, name])
+}
+model Diagram {
+  id String @id @default(uuid()) @db.Uuid
+  documentId String? @db.Uuid
+  document Document? @relation(fields: [documentId], references: [id], onDelete: Restrict)
+  publishedNumber String?
+  title String?
+  operatingPeriod String?
+  operatingDays String[] @default([])
+  calendarNotes String @default("")
+  compositionText String @default("")
+  instructions String @default("")
+  notes String @default("")
+  status String @default("Not reviewed")
+  revision Int @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  movements Movement[]
+  evidence Evidence[]
+  operations DiagramOperation[]
+  verifications Verification[]
+}
+model Movement {
+  id String @id @default(uuid()) @db.Uuid
+  diagramId String @db.Uuid
+  diagram Diagram @relation(fields: [diagramId], references: [id], onDelete: Restrict)
+  sequence Int
+  trainNumber String?
+  originId String? @db.Uuid
+  origin Station? @relation("origin", fields: [originId], references: [id], onDelete: Restrict)
+  destinationId String? @db.Uuid
+  destination Station? @relation("destination", fields: [destinationId], references: [id], onDelete: Restrict)
+  departureMinutes Int?
+  arrivalMinutes Int?
+  originalTimeText String @default("")
+  activity String @default("Unknown")
+  notes String @default("")
+  @@unique([diagramId, sequence])
+}
+model PhysicalSet {
+  id String @id @default(uuid()) @db.Uuid
+  researchLabel String
+  notes String @default("")
+  formations Formation[]
+}
+model Formation {
+  id String @id @default(uuid()) @db.Uuid
+  physicalSetId String? @db.Uuid
+  physicalSet PhysicalSet? @relation(fields: [physicalSetId], references: [id], onDelete: Restrict)
+  description String
+  members FormationMember[]
+  assignments OperationAssignment[]
+}
+model CarriageType {
+  id String @id @default(uuid()) @db.Uuid
+  code String
+  description String?
+  carriages Carriage[]
+  members FormationMember[]
+}
+model Carriage {
+  id String @id @default(uuid()) @db.Uuid
+  publishedNumber String
+  typeId String? @db.Uuid
+  type CarriageType? @relation(fields: [typeId], references: [id], onDelete: Restrict)
+  members FormationMember[]
+}
+model FormationMember {
+  id String @id @default(uuid()) @db.Uuid
+  formationId String @db.Uuid
+  formation Formation @relation(fields: [formationId], references: [id], onDelete: Restrict)
+  position Int?
+  quantity Int?
+  carriageId String? @db.Uuid
+  carriage Carriage? @relation(fields: [carriageId], references: [id], onDelete: Restrict)
+  typeId String? @db.Uuid
+  type CarriageType? @relation(fields: [typeId], references: [id], onDelete: Restrict)
+}
+model DiagramOperation {
+  id String @id @default(uuid()) @db.Uuid
+  diagramId String @db.Uuid
+  diagram Diagram @relation(fields: [diagramId], references: [id], onDelete: Restrict)
+  date DateTime? @db.Date
+  scenarioDay String?
+  assignments OperationAssignment[]
+}
+model OperationAssignment {
+  id String @id @default(uuid()) @db.Uuid
+  operationId String @db.Uuid
+  operation DiagramOperation @relation(fields: [operationId], references: [id], onDelete: Restrict)
+  formationId String @db.Uuid
+  formation Formation @relation(fields: [formationId], references: [id], onDelete: Restrict)
+  notes String @default("")
+}
+model Verification {
+  id String @id @default(uuid()) @db.Uuid
+  diagramId String @db.Uuid
+  diagram Diagram @relation(fields: [diagramId], references: [id], onDelete: Restrict)
+  status String
+  notes String
+  researcher String @default("Personal researcher")
+  createdAt DateTime @default(now())
+}
+model AuditEvent {
+  id String @id @default(uuid()) @db.Uuid
+  entityId String @db.Uuid
+  entityType String
+  action String
+  detail Json
+  createdAt DateTime @default(now())
+}

@@ -1,0 +1,42 @@
+name: lner-carriage-analyser
+services:
+  db:
+    image: postgres:16-bookworm
+    environment:
+      POSTGRES_USER: lner
+      POSTGRES_PASSWORD: lner_local_only
+      POSTGRES_DB: lner
+    volumes:
+      - database:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U lner -d lner]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+  app:
+    image: lner-analyser:local
+    build: .
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      DATABASE_URL: postgresql://lner:lner_local_only@db:5432/lner
+      STORAGE_DIR: /data
+    healthcheck:
+      test:
+        [
+          CMD,
+          node,
+          -e,
+          "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - documents:/data
+    depends_on:
+      db:
+        condition: service_healthy
+volumes:
+  database:
+  documents:
