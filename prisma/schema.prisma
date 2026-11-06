@@ -36,6 +36,7 @@ model DocumentPage {
   pdfPage Int
   printedLabel String?
   evidence Evidence[]
+  ocrJobs OcrJob[]
   @@unique([fileId, pdfPage])
 }
 model Evidence {
@@ -172,4 +173,39 @@ model AuditEvent {
   action String
   detail Json
   createdAt DateTime @default(now())
+}
+
+model OcrJob {
+ id String @id @default(uuid()) @db.Uuid
+ pageId String @db.Uuid
+ page DocumentPage @relation(fields: [pageId], references: [id], onDelete: Restrict)
+ status String @default("Queued")
+ rotation Int @default(0)
+ region Json?
+ layout Int @default(6)
+ error String?
+ lockedAt DateTime?
+ createdAt DateTime @default(now())
+ finishedAt DateTime?
+ rawText String?
+ confidence Float?
+ blocks Json?
+ imageKey String?
+ revisions TranscriptionRevision[]
+ @@index([status, createdAt])
+}
+model TranscriptionRevision {
+ id String @id @default(uuid()) @db.Uuid
+ jobId String @db.Uuid
+ job OcrJob @relation(fields: [jobId], references: [id], onDelete: Restrict)
+ text String
+ notes String
+ createdAt DateTime @default(now())
+}
+model CorrectionRule {
+ id String @id @default(uuid()) @db.Uuid
+ original String
+ replacement String
+ enabled Boolean @default(true)
+ notes String @default("")
 }

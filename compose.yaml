@@ -37,6 +37,17 @@ services:
     depends_on:
       db:
         condition: service_healthy
+  worker:
+    image: lner-analyser:local
+    command: [npm, run, worker]
+    environment:
+      DATABASE_URL: postgresql://lner:lner_local_only@db:5432/lner
+      STORAGE_DIR: /data
+    volumes:
+      - documents:/data
+    depends_on:
+      app:
+        condition: service_healthy
 volumes:
   database:
   documents:

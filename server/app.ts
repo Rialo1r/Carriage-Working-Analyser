@@ -1,4 +1,5 @@
 import Fastify from "fastify";
+import { registerOcr } from "./ocr-routes.js";
 import multipart from "@fastify/multipart";
 import staticFiles from "@fastify/static";
 import { PrismaClient, Prisma } from "@prisma/client";
@@ -416,6 +417,7 @@ export async function buildApp(
       orderBy: { createdAt: "desc" },
     }),
   );
+  registerOcr(app, db, storage);
   if (options.serveWeb !== false) {
     try {
       await access(path.resolve("dist/index.html"));

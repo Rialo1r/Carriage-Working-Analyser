@@ -1,9 +1,9 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { getDocument, GlobalWorkerOptions } from "pdfjs-dist";
-import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
+import { PDFViewer } from "./PDFViewer";
+import { OcrWorkspace } from "./OcrWorkspace";
 import "./style.css";
-GlobalWorkerOptions.workerSrc = workerUrl;
+
 type RecordData = Record<string, any>;
 const week = [
   "Monday",
@@ -81,94 +81,6 @@ function Text({
       {label}
       <textarea name={name} defaultValue={value} />
     </label>
-  );
-}
-function PDFViewer({
-  fileId,
-  startPage = 1,
-}: {
-  fileId: string;
-  startPage?: number;
-}) {
-  const canvas = useRef<HTMLCanvasElement>(null);
-  const [page, setPage] = useState(startPage);
-  const [zoom, setZoom] = useState(1.1);
-  const [pdf, setPdf] = useState<any>(null);
-  const [error, setError] = useState("");
-  useEffect(() => {
-    setPage(startPage);
-    setError("");
-    setPdf(null);
-    const task = getDocument("/api/files/" + fileId);
-    task.promise.then(setPdf).catch((e) => setError(e.message));
-    return () => {
-      void task.destroy();
-    };
-  }, [fileId]);
-  useEffect(() => setPage(startPage), [startPage]);
-  useEffect(() => {
-    if (!pdf) return;
-    let cancelled = false;
-    let render: any;
-    pdf
-      .getPage(page)
-      .then((p: any) => {
-        if (cancelled) return;
-        const viewport = p.getViewport({ scale: zoom });
-        const c = canvas.current!;
-        c.width = viewport.width;
-        c.height = viewport.height;
-        render = p.render({ canvasContext: c.getContext("2d"), viewport });
-        return render.promise;
-      })
-      .catch((e: any) => {
-        if (!cancelled) setError(e.message);
-      });
-    return () => {
-      cancelled = true;
-      render?.cancel();
-    };
-  }, [pdf, page, zoom]);
-  return (
-    <section className="pdf">
-      <div className="toolbar">
-        <button disabled={page <= 1} onClick={() => setPage(page - 1)}>
-          Previous
-        </button>
-        <label>
-          PDF page{" "}
-          <input
-            aria-label="PDF page"
-            type="number"
-            min={1}
-            max={pdf?.numPages || 1}
-            value={page}
-            onChange={(e) =>
-              setPage(
-                Math.max(
-                  1,
-                  Math.min(pdf?.numPages || 1, Number(e.target.value) || 1),
-                ),
-              )
-            }
-          />
-        </label>
-        <span>of {pdf?.numPages ?? "…"}</span>
-        <button
-          disabled={!pdf || page >= pdf.numPages}
-          onClick={() => setPage(page + 1)}
-        >
-          Next
-        </button>
-        <button onClick={() => setZoom(Math.max(0.3, zoom - 0.2))}>−</button>
-        <span>{Math.round(zoom * 100)}%</span>
-        <button onClick={() => setZoom(Math.min(4, zoom + 0.2))}>+</button>
-      </div>
-      {error && <p role="alert">{error}</p>}
-      <div className="paper">
-        <canvas ref={canvas} />
-      </div>
-    </section>
   );
 }
 function App() {
@@ -372,7 +284,7 @@ function App() {
         </div>
         <div className="edition">PERSONAL RESEARCH • PHASE 1</div>
         <nav>
-          {["Dashboard", "Documents", "Diagrams", "Stations"].map((t) => (
+          {["Dashboard", "Documents", "OCR", "Diagrams", "Stations"].map((t) => (
             <button
               className={tab === t ? "active" : ""}
               key={t}
@@ -418,7 +330,8 @@ function App() {
             {notice}
           </div>
         )}
-        {tab === "Dashboard" && (
+        {tab === "OCR" && <OcrWorkspace documents={docs} onOpen={id=>void action(()=>open(id))}/>}
+      {tab === "Dashboard" && (
           <>
             <p className="intro">
               Build a source-backed record of the workings you want to study.

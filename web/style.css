@@ -385,3 +385,4 @@ summary {
     padding: 18px;
   }
 }
+.source-crop{max-width:100%;max-height:650px;object-fit:contain;border:1px solid #c5d0c5}.transcript{white-space:pre-wrap;overflow-wrap:anywhere;background:#f1f2eb;padding:16px;font-size:13px}.large{min-height:300px}
