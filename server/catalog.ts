@@ -11,24 +11,24 @@ import {
   httpError,
 } from "./validation.js";
 export function registerCatalog(app: FastifyInstance, db: PrismaClient) {
-  app.get("/api/catalog", async () => ({
-    periods: await db.historicalPeriod.findMany({ orderBy: { name: "asc" } }),
+  app.get("/api/catalog", async (req) => { const includeArchived=z.object({includeArchived:z.enum(["true","false"]).optional()}).parse(req.query).includeArchived==="true"; const where=includeArchived?{}:{archived:false};return ({
+    periods: await db.historicalPeriod.findMany({ where, orderBy: { name: "asc" } }),
     diagrams: await db.publishedDiagram.findMany({
-      include: { period: true },
+      where,include: { period: true },
       orderBy: [{ number: "asc" }, { createdAt: "asc" }],
     }),
-    stations: await db.station.findMany({ orderBy: { name: "asc" } }),
-    types: await db.carriageType.findMany({ orderBy: { name: "asc" } }),
+    stations: await db.station.findMany({ where, orderBy: { name: "asc" } }),
+    types: await db.carriageType.findMany({ where, orderBy: { name: "asc" } }),
     formations: (
       await db.formation.findMany({
-        include: formationInclude,
+        where,include: formationInclude,
         orderBy: { createdAt: "desc" },
       })
     ).map((f) => ({ ...f, count: formationCount(f) })),
-    sets: (await db.physicalSet.findMany({ orderBy: { serial: "asc" } })).map(
+    sets: (await db.physicalSet.findMany({where, orderBy: { serial: "asc" } })).map(
       (s) => ({ ...s, code: setCode(s.serial) }),
     ),
-  }));
+  });});
   app.post("/api/periods", async (req, reply) => {
     const data = periodInput.parse(req.body);
     const period = await db.$transaction(async (tx) => {

@@ -7,6 +7,7 @@ datasource db {
  url = env("DATABASE_URL")
 }
 model HistoricalPeriod {
+ archived Boolean @default(false)
  id String @id @default(uuid()) @db.Uuid
  name String
  startDate DateTime? @db.Date
@@ -15,6 +16,7 @@ model HistoricalPeriod {
  diagrams PublishedDiagram[]
 }
 model PublishedDiagram {
+ archived Boolean @default(false)
  id String @id @default(uuid()) @db.Uuid
  periodId String @db.Uuid
  period HistoricalPeriod @relation(fields:[periodId],references:[id],onDelete:Restrict)
@@ -26,6 +28,8 @@ model PublishedDiagram {
  @@index([periodId, number])
 }
 model Station {
+ archived Boolean @default(false)
+ revision Int @default(1)
  id String @id @default(uuid()) @db.Uuid
  name String
  notes String @default("")
@@ -35,6 +39,8 @@ model Station {
  @@index([name])
 }
 model CarriageType {
+ archived Boolean @default(false)
+ revision Int @default(1)
  id String @id @default(uuid()) @db.Uuid
  name String
  code String?
@@ -43,6 +49,7 @@ model CarriageType {
  changes FormationChange[]
 }
 model Formation {
+ archived Boolean @default(false)
  id String @id @default(uuid()) @db.Uuid
  name String
  completeness String @default("Unknown")
@@ -65,6 +72,7 @@ model FormationMember {
  notes String @default("")
 }
 model WorkingDefinition {
+ archived Boolean @default(false)
  id String @id @default(uuid()) @db.Uuid
  diagramId String @db.Uuid
  diagram PublishedDiagram @relation(fields:[diagramId],references:[id],onDelete:Restrict)
@@ -102,6 +110,9 @@ model OperatingCalendar {
  workingId String @unique @db.Uuid
  working WorkingDefinition @relation(fields:[workingId],references:[id],onDelete:Restrict)
  weekdays Int[]
+ cycleWeeks Int @default(1)
+ anchorDate DateTime? @db.Date
+ weekOffsets Int[] @default([0])
  validFrom DateTime? @db.Date
  validTo DateTime? @db.Date
  notes String @default("")
@@ -176,6 +187,8 @@ model NextWorkingReference {
  offsetDays Int?
  targetWeekday Int?
  targetDate DateTime? @db.Date
+ storageStationId String? @db.Uuid
+ verified Boolean @default(false)
  notes String @default("")
  @@unique([workingId,weekday])
 }
@@ -200,6 +213,7 @@ model OccurrenceReference {
  note String
 }
 model PhysicalSet {
+ archived Boolean @default(false)
  id String @id @default(uuid()) @db.Uuid
  serial Int @unique @default(autoincrement())
  label String @default("")
@@ -237,4 +251,9 @@ model AuditEvent {
  after Json?
  createdAt DateTime @default(now())
  @@index([entityId,createdAt])
+}
+
+model DatasetState {
+ id String @id
+ version Int @default(0)
 }

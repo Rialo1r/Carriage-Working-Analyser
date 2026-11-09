@@ -37,7 +37,7 @@ export const workingInclude = {
   researchNotes: { orderBy: { createdAt: "desc" as const } },
 };
 export const json = (value: unknown) => JSON.parse(JSON.stringify(value));
-export function audit(
+export async function audit(
   tx: any,
   entityId: string,
   entityType: string,
@@ -46,6 +46,7 @@ export function audit(
   before: unknown,
   after: unknown,
 ) {
+  if(!['Connection review','Issue review','Rotation review','Physical set','Manual assignment','Rotation assignment','Rotation'].includes(entityType))await tx.datasetState.upsert({where:{id:'main'},create:{id:'main',version:1},update:{version:{increment:1}}});
   return tx.auditEvent.create({
     data: {
       entityId,

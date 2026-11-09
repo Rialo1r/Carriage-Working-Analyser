@@ -5,6 +5,7 @@ import { Prisma } from "@prisma/client";
 import { access } from "node:fs/promises";
 import path from "node:path";
 import { createDb } from "./data.js";
+import { registerManagement } from "./management.js";
 import { registerCatalog } from "./catalog.js";
 import { registerWorkings } from "./workings.js";
 import { registerTimetable } from "./timetable.js";
@@ -85,6 +86,7 @@ export async function buildApp(
     }),
   }));
   registerCatalog(app, db);
+  registerManagement(app, db);
   registerWorkings(app, db);
   registerTimetable(app, db);
   if (options.serveWeb !== false) {

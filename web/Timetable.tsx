@@ -4,6 +4,7 @@ import {
   Row,
   days,
   dateLabel,
+  dayLabel,
   timeLabel,
   SearchSelect,
   SaveForm,
@@ -198,7 +199,7 @@ export function Timetable({ onOpen }: { onOpen: (id: string) => void }) {
                     .filter((o: Row) => o.onCalendar)
                     .map((o: Row) => ({
                       id: o.id,
-                      label: `${o.date.slice(0, 10)} · Diagram ${o.working.diagram.number} · ${o.working.label || o.workingId.slice(0, 6)} · ${o.working.startStation?.name || "?"} → ${o.working.finishStation?.name || "?"}`,
+                      label: `${o.date.slice(0, 10)} · Diagram ${o.working.diagram.number} · ${o.working.label || dayLabel(o.working.calendar?.weekdays||[])} · ${o.working.startStation?.name || "?"} → ${o.working.finishStation?.name || "?"}`,
                     }))}
                   required
                 />
@@ -232,7 +233,7 @@ export function Timetable({ onOpen }: { onOpen: (id: string) => void }) {
                   </button>
                   <p>
                     {o.outgoing?.to
-                      ? `${o.outgoing.to.date.slice(0, 10)} · Diagram ${o.outgoing.to.working.diagram.number} · target occurrence ${o.outgoing.to.id.slice(0, 8)}`
+                      ? `${o.outgoing.to.date.slice(0, 10)} · Diagram ${o.outgoing.to.working.diagram.number}`
                       : o.outgoing?.kind || "Unknown next working"}
                   </p>
                   <small>{o.outgoing?.note || "No entered instruction"}</small>
@@ -255,7 +256,7 @@ export function Timetable({ onOpen }: { onOpen: (id: string) => void }) {
                     {o.date.slice(0, 10)} · Diagram {o.working.diagram.number} ·{" "}
                     {o.working.label}
                   </button>
-                  <small>Occurrence {o.id}</small>
+                  
                 </div>
                 <p>
                   {o.assignments.length

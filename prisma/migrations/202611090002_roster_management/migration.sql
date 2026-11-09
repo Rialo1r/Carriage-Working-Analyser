@@ -1,0 +1,13 @@
+ALTER TABLE "HistoricalPeriod" ADD "archived" BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE "PublishedDiagram" ADD "archived" BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE "Station" ADD "archived" BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE "CarriageType" ADD "archived" BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE "Formation" ADD "archived" BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE "WorkingDefinition" ADD "archived" BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE "PhysicalSet" ADD "archived" BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE "Station" ADD "revision" INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE "CarriageType" ADD "revision" INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE "OperatingCalendar" ADD "cycleWeeks" INTEGER NOT NULL DEFAULT 1 CHECK ("cycleWeeks" BETWEEN 1 AND 12), ADD "anchorDate" DATE, ADD "weekOffsets" INTEGER[] NOT NULL DEFAULT ARRAY[0];
+ALTER TABLE "NextWorkingReference" ADD "storageStationId" UUID REFERENCES "Station"("id") ON DELETE RESTRICT, ADD "verified" BOOLEAN NOT NULL DEFAULT false;
+CREATE TABLE "DatasetState" (id TEXT PRIMARY KEY, version INTEGER NOT NULL DEFAULT 0);
+INSERT INTO "DatasetState"(id,version) VALUES ('main',0);

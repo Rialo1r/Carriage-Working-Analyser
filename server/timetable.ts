@@ -21,6 +21,7 @@ export function registerTimetable(app: FastifyInstance, db: PrismaClient) {
     const q = range.parse(req.body),
       start = new Date(q.start);
     const workings = await db.workingDefinition.findMany({
+      where:{archived:false,diagram:{archived:false,period:{archived:false}}},
       include: workingInclude,
     });
     if (workings.length > 2000)
@@ -113,7 +114,7 @@ export function registerTimetable(app: FastifyInstance, db: PrismaClient) {
       .filter(
         (o) =>
           o.assignments.length ||
-          onCalendar(o.working.calendar, o.date, o.working.diagram.period),
+          !o.working.archived&&!o.working.diagram.archived&&onCalendar(o.working.calendar, o.date, o.working.diagram.period),
       )
       .map((o) => {
         const variation = o.working.variations.find(
@@ -122,7 +123,7 @@ export function registerTimetable(app: FastifyInstance, db: PrismaClient) {
         const formation = variation ? variation.formation : o.working.formation;
         return {
           ...o,
-          onCalendar: onCalendar(
+          onCalendar: !o.working.archived&&!o.working.diagram.archived&&onCalendar(
             o.working.calendar,
             o.date,
             o.working.diagram.period,
@@ -167,7 +168,7 @@ export function registerTimetable(app: FastifyInstance, db: PrismaClient) {
           where: { id: data.occurrenceId },
           include: { working: { include: workingInclude } },
         });
-        if (!onCalendar(o.working.calendar, o.date, o.working.diagram.period))
+        if (o.working.archived||o.working.diagram.archived||!onCalendar(o.working.calendar, o.date, o.working.diagram.period))
           throw httpError(
             400,
             "This occurrence is outside the current operating calendar. Edit the working or choose another occurrence.",

@@ -17,7 +17,7 @@ async function choose(locator: Locator, pattern: RegExp) {
 async function nav(page: Page, name: string) {
   await page
     .getByRole("navigation", { name: "Main navigation" })
-    .getByRole("button", { name, exact: true })
+    .getByRole("button", { name:name==="Workings"?"Carriage Roster":name, exact: true })
     .click();
 }
 async function openWorking(page: Page, label: string) {
@@ -117,11 +117,11 @@ test("Phase 1 end-to-end manual entry, variants, exact continuation selection an
     .click();
   await choose(
     page.getByLabel("Starting station", { exact: true }),
-    /^Scarborough ·/,
+    /^Scarborough(?: ·|$)/,
   );
   await choose(
     page.getByLabel("Finishing station", { exact: true }),
-    /^Scarborough ·/,
+    /^Scarborough(?: ·|$)/,
   );
   await page.getByLabel("Starting time (HH:MM, optional)").fill("08:00");
   await page.getByLabel("Finishing time (HH:MM, optional)").fill("18:00");
@@ -132,7 +132,7 @@ test("Phase 1 end-to-end manual entry, variants, exact continuation selection an
     .click();
   await choose(
     page.getByLabel("Intermediate station 1", { exact: true }),
-    /^Hull ·/,
+    /^Hull(?: ·|$)/,
   );
   await choose(
     page.getByLabel("Base carriage formation", { exact: true }),
@@ -158,7 +158,7 @@ test("Phase 1 end-to-end manual entry, variants, exact continuation selection an
   await page.getByLabel("Working label / variant").fill("Saturday");
   await choose(
     page.getByLabel("Finishing station", { exact: true }),
-    /^Neville Hill ·/,
+    /^Neville Hill(?: ·|$)/,
   );
   await page.getByRole("button", { name: "Save working", exact: true }).click();
   await expect(
@@ -174,11 +174,11 @@ test("Phase 1 end-to-end manual entry, variants, exact continuation selection an
   );
   await choose(
     page.getByLabel("Starting station", { exact: true }),
-    /^Neville Hill ·/,
+    /^Neville Hill(?: ·|$)/,
   );
   await choose(
     page.getByLabel("Finishing station", { exact: true }),
-    /^Scarborough ·/,
+    /^Scarborough(?: ·|$)/,
   );
   await page
     .getByLabel("Instruction text 1", { exact: true })

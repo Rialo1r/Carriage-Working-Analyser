@@ -680,3 +680,4 @@ dialog::backdrop {
     min-width: 0;
   }
 }
+.roster-week{display:grid;grid-template-columns:repeat(7,minmax(100px,1fr));gap:5px;overflow:auto;margin:20px 0}.roster-week>div{background:#eef1e5;padding:10px}.roster-week strong{font-size:12px}.roster-week button{display:block;width:100%;margin:8px 0;text-align:left;padding:8px;font-size:12px}.roster-week small{display:block;margin-top:4px}.record-actions{display:flex;gap:6px;flex-wrap:wrap}

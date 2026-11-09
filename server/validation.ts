@@ -49,6 +49,9 @@ export const formationInput = z
 export const calendarInput = z
   .object({
     weekdays: days,
+    cycleWeeks:z.number().int().min(1).max(12).default(1),
+    anchorDate:optionalDate,
+    weekOffsets:z.array(z.number().int().min(0).max(11)).min(1).max(12).default([0]),
     validFrom: optionalDate,
     validTo: optionalDate,
     notes: text.default(""),
@@ -63,6 +66,8 @@ export const calendarInput = z
       .max(1000)
       .default([]),
   })
+  .refine(v=>v.weekOffsets.every(n=>n<v.cycleWeeks)&&new Set(v.weekOffsets).size===v.weekOffsets.length,'Cycle weeks must be distinct and within the selected cycle')
+  .refine(v=>v.cycleWeeks===1||!!v.anchorDate,'Alternate-week rules require an anchor date')
   .refine(
     (v) => !v.validFrom || !v.validTo || v.validFrom <= v.validTo,
     "Calendar end precedes start",
@@ -87,6 +92,8 @@ export const ruleInput = z
     offsetDays: z.number().int().min(0).max(366).nullable().optional(),
     targetWeekday: z.number().int().min(0).max(6).nullable().optional(),
     targetDate: optionalDate,
+    storageStationId:nullableId,
+    verified:z.boolean().default(false),
     notes: text.default(""),
   })
   .superRefine((r, ctx) => {
@@ -101,7 +108,7 @@ export const ruleInput = z
         message:
           "Choose a specific working, or retain an unresolved published number",
       });
-    if (r.kind !== "TARGET" && (r.targetWorkingId || r.enteredNumber))
+    if (!["TARGET", "STABLED"].includes(r.kind) && (r.targetWorkingId || r.enteredNumber))
       ctx.addIssue({
         code: "custom",
         message: "Only a next-working instruction can reference a working",
@@ -146,6 +153,7 @@ export const workingInput = z
 export function calendarData(c: z.infer<typeof calendarInput>) {
   return {
     ...c,
+    anchorDate:c.anchorDate?new Date(c.anchorDate):null,
     validFrom: c.validFrom ? new Date(c.validFrom) : null,
     validTo: c.validTo ? new Date(c.validTo) : null,
     exceptions: {

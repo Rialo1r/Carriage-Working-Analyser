@@ -1,12 +1,13 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { api, Row, workingLabel, dayLabel, timeLabel } from "./common";
+import { api, Row, workingLabel, dayLabel, timeLabel, readableResearch } from "./common";
 import {
   DiagramPage,
   PhysicalSets,
   Registers,
   Formations,
 } from "./CatalogPages";
+import { RosterIndex,AddRosterSet } from "./Roster";
 import { WorkingEditor, WorkingDetail } from "./Workings";
 import { Timetable } from "./Timetable";
 import "./style.css";
@@ -45,6 +46,7 @@ function App() {
       if (request !== navigation.current) return;
       selectedId.current = id;
       setSelected(working);
+      setDraft(null);
       setEditing(false);
       setCopy(false);
       setTab("Workings");
@@ -71,7 +73,7 @@ function App() {
           : "Add Working"
       : selected
         ? "Working details"
-        : "Daily workings",
+        : "Carriage roster",
     "Published Diagrams": "Published diagram register",
     "Physical Sets": "Physical carriage sets",
     Formations: "Carriage formations",
@@ -89,10 +91,12 @@ function App() {
     "Registers",
     "History",
   ];
-  function addWorking() {
+  const [addSet,setAddSet]=useState(false),[draft,setDraft]=useState<Row|null>(null);
+  function addWorking(diagramId?:string) {
     navigation.current++;
     selectedId.current = null;
     setSelected(null);
+    setDraft(diagramId?{diagramId}:null);
     setCopy(false);
     setCopyDays(undefined);
     setEditing(true);
@@ -132,7 +136,7 @@ function App() {
                   void refresh().catch((e) => setError(e.message));
               }}
             >
-              {t === "Registers" ? "Stations & Types" : t}
+              {t === "Registers" ? "Stations & Types" : t === "Workings" ? "Carriage Roster" : t}
             </button>
           ))}
         </nav>
@@ -167,6 +171,7 @@ function App() {
           </div>
         )}
         {!catalog && !error && <p>Loading your research database…</p>}
+        {catalog&&addSet&&<AddRosterSet catalog={catalog} onClose={()=>setAddSet(false)} onAdded={async d=>{await refresh();addWorking(d.id);}}/>}
         {catalog && (
           <>
             {tab === "Dashboard" && (
@@ -179,7 +184,7 @@ function App() {
                       next-working instructions. Leave physical identities and
                       uncertain details open until you have the evidence.
                     </p>
-                    <button className="primary" onClick={addWorking}>
+                    <button className="primary" onClick={()=>addWorking()}>
                       Add Working
                     </button>
                     <button onClick={() => setTab("Published Diagrams")}>
@@ -283,7 +288,7 @@ function App() {
                     (copyDays?.join(",") || "")
                   }
                   catalog={catalog}
-                  working={selected}
+                  working={selected||draft}
                   copy={copy}
                   copyDays={copyDays}
                   reload={refresh}
@@ -324,72 +329,7 @@ function App() {
                   onChanged={changed}
                 />
               ) : (
-                <>
-                  <section className="panel">
-                    <div className="section-head">
-                      <div>
-                        <h2>Entered working definitions</h2>
-                        <p>
-                          One Monday–Friday entry can produce five dated
-                          workings each week.
-                        </p>
-                      </div>
-                      <button className="primary" onClick={addWorking}>
-                        Add Working
-                      </button>
-                    </div>
-                    <label>
-                      Search published number, station or period
-                      <input
-                        aria-label="Search workings"
-                        type="search"
-                        value={query}
-                        onChange={(e) => setQuery(e.target.value)}
-                        placeholder="262, Scarborough, 1939…"
-                      />
-                    </label>
-                  </section>
-                  <section className="panel">
-                    {!workings.length && (
-                      <p className="empty">
-                        No workings yet. Add a published diagram first, then
-                        enter its daily instructions.
-                      </p>
-                    )}
-                    {workings
-                      .filter((w) =>
-                        workingLabel(w)
-                          .toLowerCase()
-                          .includes(query.toLowerCase()),
-                      )
-                      .map((w) => (
-                        <article key={w.id}>
-                          <div className="section-head">
-                            <button
-                              className="link"
-                              onClick={() => void openWorking(w.id)}
-                            >
-                              Diagram {w.diagram.number} ·{" "}
-                              {w.label || dayLabel(w.calendar?.weekdays || [])}
-                            </button>
-                            <span className="badge">
-                              {w.diagram.period.name}
-                            </span>
-                          </div>
-                          <p>
-                            {dayLabel(w.calendar?.weekdays || [])} ·{" "}
-                            {w.startStation?.name || "Unknown start"} →{" "}
-                            {w.finishStation?.name || "Unknown finish"}
-                          </p>
-                          <p>
-                            {timeLabel(w.startMinutes, w.startDayOffset)} –{" "}
-                            {timeLabel(w.finishMinutes, w.finishDayOffset)}
-                          </p>
-                          <small>{w.routeText}</small>
-                        </article>
-                      ))}
-                  </section>
-                </>
+                <RosterIndex catalog={catalog} workings={workings} onAdd={addWorking} onNewSet={()=>setAddSet(true)} onOpen={id=>void openWorking(id)} reload={refresh}/>
               ))}
             {tab === "History" && (
               <section className="panel">
@@ -408,13 +348,13 @@ function App() {
                     </strong>
                     <p>{e.reason}</p>
                     <small>
-                      {new Date(e.createdAt).toLocaleString()} · {e.entityId}
+                      {new Date(e.createdAt).toLocaleString()}
                     </small>
                     <details>
                       <summary>Inspect retained before / after values</summary>
                       <pre>
                         {JSON.stringify(
-                          { before: e.before, after: e.after },
+                          { before: readableResearch(e.before), after: readableResearch(e.after) },
                           null,
                           2,
                         )}

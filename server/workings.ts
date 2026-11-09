@@ -28,6 +28,7 @@ export function registerWorkings(app: FastifyInstance, db: PrismaClient) {
       })
       .parse(req.query);
     const all = await db.workingDefinition.findMany({
+      where:{archived:false,diagram:{archived:false,period:{archived:false}}},
       include: workingInclude,
       orderBy: { createdAt: "asc" },
     });
@@ -72,7 +73,9 @@ export function registerWorkings(app: FastifyInstance, db: PrismaClient) {
       .parse(req.query);
     return db.workingDefinition.findMany({
       where: {
+        archived:false,
         diagram: {
+          archived:false,
           number: { equals: q.number, mode: "insensitive" },
           ...(q.periodId ? { periodId: q.periodId } : {}),
         },
@@ -208,9 +211,11 @@ export function registerWorkings(app: FastifyInstance, db: PrismaClient) {
           await tx.workingDefinition.findUniqueOrThrow({
             where: { id: r.targetWorkingId },
           });
+        if(r.verified&&(!r.notes.trim()||!before.sources.length))throw httpError(400,"A source-verified continuation requires source wording in notes and a source citation on this working.");
         const rule = {
           ...r,
           targetWorkingId: r.targetWorkingId ?? null,
+          storageStationId:r.storageStationId??null,
           enteredNumber: r.enteredNumber ?? null,
           offsetDays: r.offsetDays ?? null,
           targetWeekday: r.targetWeekday ?? null,

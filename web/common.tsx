@@ -246,7 +246,7 @@ export function SaveForm({
   );
 }
 export const workingLabel = (w: Row) =>
-  `${w.diagram.number} · ${w.label || dayLabel(w.calendar?.weekdays || [])} · ${w.startStation?.name || "?"} → ${w.finishStation?.name || "?"} · ${w.diagram.period.name} · ${w.id.slice(0, 6)}`;
+  `${w.diagram.number} · ${w.label || dayLabel(w.calendar?.weekdays || [])} · ${w.startStation?.name || "?"} → ${w.finishStation?.name || "?"} · ${w.diagram.period.name}`;
 export function CatalogDialog({
   kind,
   onClose,
@@ -279,4 +279,10 @@ export function CatalogDialog({
       </SaveForm>
     </Modal>
   );
+}
+
+export function readableResearch(value:any):any{
+ if(Array.isArray(value))return value.map(readableResearch);
+ if(value&&typeof value==='object')return Object.fromEntries(Object.entries(value).filter(([k,v])=>k!=='id'&&!k.endsWith('Id')&&k!=='exclusiveKey'&&!(typeof v==='string'&&/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(v))).map(([k,v])=>[k,readableResearch(v)]));
+ return value;
 }
