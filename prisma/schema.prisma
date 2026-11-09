@@ -1,398 +1,240 @@
 generator client {
-  provider = "prisma-client-js"
-  engineType = "client"
+ provider = "prisma-client-js"
+ engineType = "client"
 }
 datasource db {
-  provider = "postgresql"
-  url = env("DATABASE_URL")
+ provider = "postgresql"
+ url = env("DATABASE_URL")
 }
-model Document {
-  id String @id @default(uuid()) @db.Uuid
-  title String
-  sourceDate String?
-  operatingPeriod String?
-  region String?
-  description String?
-  createdAt DateTime @default(now())
-  files DocumentFile[]
-  diagrams Diagram[]
-  services TrainService[]
+model HistoricalPeriod {
+ id String @id @default(uuid()) @db.Uuid
+ name String
+ startDate DateTime? @db.Date
+ endDate DateTime? @db.Date
+ notes String @default("")
+ diagrams PublishedDiagram[]
 }
-model DocumentFile {
-  id String @id @default(uuid()) @db.Uuid
-  documentId String @db.Uuid
-  document Document @relation(fields: [documentId], references: [id], onDelete: Restrict)
-  originalName String
-  storageKey String @unique
-  sha256 String
-  size Int
-  pageCount Int
-  createdAt DateTime @default(now())
-  pages DocumentPage[]
-}
-model DocumentPage {
-  id String @id @default(uuid()) @db.Uuid
-  fileId String @db.Uuid
-  file DocumentFile @relation(fields: [fileId], references: [id], onDelete: Restrict)
-  pdfPage Int
-  printedLabel String?
-  evidence Evidence[]
-  ocrJobs OcrJob[]
-  @@unique([fileId, pdfPage])
-}
-model Evidence {
-  id String @id @default(uuid()) @db.Uuid
-  pageId String @db.Uuid
-  page DocumentPage @relation(fields: [pageId], references: [id], onDelete: Restrict)
-  diagramId String @db.Uuid
-  diagram Diagram @relation(fields: [diagramId], references: [id], onDelete: Restrict)
-  originalText String @default("")
-  transcription String @default("")
-  notes String @default("")
-  createdAt DateTime @default(now())
+model PublishedDiagram {
+ id String @id @default(uuid()) @db.Uuid
+ periodId String @db.Uuid
+ period HistoricalPeriod @relation(fields:[periodId],references:[id],onDelete:Restrict)
+ number String
+ description String @default("")
+ revision Int @default(1)
+ createdAt DateTime @default(now())
+ workings WorkingDefinition[]
+ @@index([periodId, number])
 }
 model Station {
-  id String @id @default(uuid()) @db.Uuid
-  name String @unique
-  aliases StationAlias[]
-  origins Movement[] @relation("origin")
-  destinations Movement[] @relation("destination")
-  calls MovementCall[]
-  timetableEntries TimetableEntry[]
-}
-model StationAlias {
-  id String @id @default(uuid()) @db.Uuid
-  stationId String @db.Uuid
-  station Station @relation(fields: [stationId], references: [id], onDelete: Restrict)
-  name String
-  @@unique([stationId, name])
-}
-model Diagram {
-  id String @id @default(uuid()) @db.Uuid
-  documentId String? @db.Uuid
-  document Document? @relation(fields: [documentId], references: [id], onDelete: Restrict)
-  publishedNumber String?
-  title String?
-  operatingPeriod String?
-  operatingDays String[] @default([])
-  calendarNotes String @default("")
-  compositionText String @default("")
-  instructions String @default("")
-  notes String @default("")
-  status String @default("Not reviewed")
-  revision Int @default(1)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  movements Movement[]
-  evidence Evidence[]
-  operations DiagramOperation[]
-  verifications Verification[]
-  calendarRules CalendarRule[]
-  requirements CompositionRequirement[]
-  researchNotes ResearchNote[]
-  outgoing DiagramTransition[] @relation("transitionFrom")
-  incoming DiagramTransition[] @relation("transitionTo")
-  rotationSteps RotationStep[]
-}
-model Movement {
-  id String @id @default(uuid()) @db.Uuid
-  diagramId String @db.Uuid
-  diagram Diagram @relation(fields: [diagramId], references: [id], onDelete: Restrict)
-  sequence Int
-  trainNumber String?
-  originId String? @db.Uuid
-  origin Station? @relation("origin", fields: [originId], references: [id], onDelete: Restrict)
-  destinationId String? @db.Uuid
-  destination Station? @relation("destination", fields: [destinationId], references: [id], onDelete: Restrict)
-  departureMinutes Int?
-  arrivalMinutes Int?
-  originalTimeText String @default("")
-  activity String @default("Unknown")
-  notes String @default("")
-  calls MovementCall[]
-  serviceLinks MovementServiceLink[]
-  changes CompositionChange[]
-  @@unique([diagramId, sequence])
-}
-model PhysicalSet {
-  id String @id @default(uuid()) @db.Uuid
-  researchLabel String
-  notes String @default("")
-  formations Formation[]
-}
-model Formation {
-  id String @id @default(uuid()) @db.Uuid
-  physicalSetId String? @db.Uuid
-  physicalSet PhysicalSet? @relation(fields: [physicalSetId], references: [id], onDelete: Restrict)
-  description String
-  members FormationMember[]
-  assignments OperationAssignment[]
+ id String @id @default(uuid()) @db.Uuid
+ name String
+ notes String @default("")
+ starts WorkingDefinition[] @relation("start")
+ finishes WorkingDefinition[] @relation("finish")
+ routeCalls RouteCall[]
+ @@index([name])
 }
 model CarriageType {
-  id String @id @default(uuid()) @db.Uuid
-  code String
-  description String?
-  seatingClass String?
-  seats Int?
-  brake Boolean?
-  catering String?
-  lengthMetres Float?
-  carriages Carriage[]
-  members FormationMember[]
+ id String @id @default(uuid()) @db.Uuid
+ name String
+ code String?
+ notes String @default("")
+ members FormationMember[]
+ changes FormationChange[]
 }
-model Carriage {
-  id String @id @default(uuid()) @db.Uuid
-  publishedNumber String
-  typeId String? @db.Uuid
-  type CarriageType? @relation(fields: [typeId], references: [id], onDelete: Restrict)
-  members FormationMember[]
+model Formation {
+ id String @id @default(uuid()) @db.Uuid
+ name String
+ completeness String @default("Unknown")
+ notes String @default("")
+ revision Int @default(1)
+ createdAt DateTime @default(now())
+ members FormationMember[]
+ workings WorkingDefinition[]
+ variations FormationVariation[]
 }
 model FormationMember {
-  id String @id @default(uuid()) @db.Uuid
-  formationId String @db.Uuid
-  formation Formation @relation(fields: [formationId], references: [id], onDelete: Restrict)
-  position Int?
-  quantity Int?
-  carriageId String? @db.Uuid
-  carriage Carriage? @relation(fields: [carriageId], references: [id], onDelete: Restrict)
-  typeId String? @db.Uuid
-  type CarriageType? @relation(fields: [typeId], references: [id], onDelete: Restrict)
-}
-model DiagramOperation {
-  id String @id @default(uuid()) @db.Uuid
-  diagramId String @db.Uuid
-  diagram Diagram @relation(fields: [diagramId], references: [id], onDelete: Restrict)
-  date DateTime? @db.Date
-  scenarioDay String?
-  assignments OperationAssignment[]
-}
-model OperationAssignment {
-  id String @id @default(uuid()) @db.Uuid
-  operationId String @db.Uuid
-  operation DiagramOperation @relation(fields: [operationId], references: [id], onDelete: Restrict)
-  formationId String @db.Uuid
-  formation Formation @relation(fields: [formationId], references: [id], onDelete: Restrict)
-  notes String @default("")
-}
-model Verification {
-  id String @id @default(uuid()) @db.Uuid
-  diagramId String @db.Uuid
-  diagram Diagram @relation(fields: [diagramId], references: [id], onDelete: Restrict)
-  status String
-  notes String
-  researcher String @default("Personal researcher")
-  createdAt DateTime @default(now())
-}
-model AuditEvent {
-  id String @id @default(uuid()) @db.Uuid
-  entityId String @db.Uuid
-  entityType String
-  action String
-  detail Json
-  createdAt DateTime @default(now())
-}
-
-model OcrJob {
  id String @id @default(uuid()) @db.Uuid
- pageId String @db.Uuid
- page DocumentPage @relation(fields: [pageId], references: [id], onDelete: Restrict)
- status String @default("Queued")
- rotation Int @default(0)
- region Json?
- layout Int @default(6)
- error String?
- lockedAt DateTime?
- createdAt DateTime @default(now())
- finishedAt DateTime?
- rawText String?
- confidence Float?
- blocks Json?
- imageKey String?
- revisions TranscriptionRevision[]
- @@index([status, createdAt])
-}
-model TranscriptionRevision {
- id String @id @default(uuid()) @db.Uuid
- jobId String @db.Uuid
- job OcrJob @relation(fields: [jobId], references: [id], onDelete: Restrict)
- text String
- notes String
- createdAt DateTime @default(now())
-}
-model CorrectionRule {
- id String @id @default(uuid()) @db.Uuid
- original String
- replacement String
- enabled Boolean @default(true)
+ formationId String @db.Uuid
+ formation Formation @relation(fields:[formationId],references:[id],onDelete:Restrict)
+ typeId String? @db.Uuid
+ type CarriageType? @relation(fields:[typeId],references:[id],onDelete:Restrict)
+ quantity Int?
+ position Int?
+ vehicleNumber String?
  notes String @default("")
 }
-
-model CalendarRule {
+model WorkingDefinition {
  id String @id @default(uuid()) @db.Uuid
  diagramId String @db.Uuid
- diagram Diagram @relation(fields: [diagramId], references: [id], onDelete: Restrict)
+ diagram PublishedDiagram @relation(fields:[diagramId],references:[id],onDelete:Restrict)
+ label String @default("")
+ startStationId String? @db.Uuid
+ startStation Station? @relation("start",fields:[startStationId],references:[id],onDelete:Restrict)
+ finishStationId String? @db.Uuid
+ finishStation Station? @relation("finish",fields:[finishStationId],references:[id],onDelete:Restrict)
+ startMinutes Int?
+ finishMinutes Int?
+ startDayOffset Int @default(0)
+ finishDayOffset Int @default(0)
+ formationId String? @db.Uuid
+ formation Formation? @relation(fields:[formationId],references:[id],onDelete:Restrict)
+ routeText String @default("")
+ notes String @default("")
+ exclusive Boolean @default(true)
+ revision Int @default(1)
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ calendar OperatingCalendar?
+ routeCalls RouteCall[]
+ instructions SpecialInstruction[]
+ variations FormationVariation[]
+ changes FormationChange[]
+ sources SourceReference[]
+ nextRules NextWorkingReference[] @relation("ruleFrom")
+ incomingRules NextWorkingReference[] @relation("ruleTo")
+ occurrences WorkingOccurrence[]
+ researchNotes ResearchNote[]
+ @@index([diagramId])
+}
+model OperatingCalendar {
+ id String @id @default(uuid()) @db.Uuid
+ workingId String @unique @db.Uuid
+ working WorkingDefinition @relation(fields:[workingId],references:[id],onDelete:Restrict)
+ weekdays Int[]
+ validFrom DateTime? @db.Date
+ validTo DateTime? @db.Date
+ notes String @default("")
+ exceptions CalendarException[]
+}
+model CalendarException {
+ id String @id @default(uuid()) @db.Uuid
+ calendarId String @db.Uuid
+ calendar OperatingCalendar @relation(fields:[calendarId],references:[id],onDelete:Restrict)
  date DateTime @db.Date
  operates Boolean
  notes String
- @@unique([diagramId, date])
+ @@unique([calendarId,date])
 }
-model MovementCall {
+model RouteCall {
  id String @id @default(uuid()) @db.Uuid
- movementId String @db.Uuid
- movement Movement @relation(fields: [movementId], references: [id], onDelete: Restrict)
+ workingId String @db.Uuid
+ working WorkingDefinition @relation(fields:[workingId],references:[id],onDelete:Restrict)
  stationId String @db.Uuid
- station Station @relation(fields: [stationId], references: [id], onDelete: Restrict)
+ station Station @relation(fields:[stationId],references:[id],onDelete:Restrict)
  sequence Int
- arrivalMinutes Int?
- departureMinutes Int?
- originalText String @default("")
- @@unique([movementId, sequence])
-}
-model CompositionRequirement {
- id String @id @default(uuid()) @db.Uuid
- diagramId String @db.Uuid
- diagram Diagram @relation(fields: [diagramId], references: [id], onDelete: Restrict)
- typeCode String?
- quantity Int?
- position Int?
  notes String @default("")
+ @@unique([workingId,sequence])
 }
-model CompositionChange {
+model SpecialInstruction {
  id String @id @default(uuid()) @db.Uuid
- movementId String @db.Uuid
- movement Movement @relation(fields: [movementId], references: [id], onDelete: Restrict)
- afterMovement Boolean @default(true)
+ workingId String @db.Uuid
+ working WorkingDefinition @relation(fields:[workingId],references:[id],onDelete:Restrict)
+ weekdays Int[]
+ text String
+}
+model FormationVariation {
+ id String @id @default(uuid()) @db.Uuid
+ workingId String @db.Uuid
+ working WorkingDefinition @relation(fields:[workingId],references:[id],onDelete:Restrict)
+ weekday Int
+ formationId String? @db.Uuid
+ formation Formation? @relation(fields:[formationId],references:[id],onDelete:Restrict)
+ notes String
+ @@unique([workingId,weekday])
+}
+model FormationChange {
+ id String @id @default(uuid()) @db.Uuid
+ workingId String @db.Uuid
+ working WorkingDefinition @relation(fields:[workingId],references:[id],onDelete:Restrict)
+ weekdays Int[]
  action String
- typeCode String?
+ stage String
+ typeId String? @db.Uuid
+ type CarriageType? @relation(fields:[typeId],references:[id],onDelete:Restrict)
  quantity Int?
  notes String
+}
+model SourceReference {
+ id String @id @default(uuid()) @db.Uuid
+ workingId String @db.Uuid
+ working WorkingDefinition @relation(fields:[workingId],references:[id],onDelete:Restrict)
+ title String
+ sourceDate String?
+ page String?
+ notes String @default("")
+}
+model NextWorkingReference {
+ id String @id @default(uuid()) @db.Uuid
+ workingId String @db.Uuid
+ working WorkingDefinition @relation("ruleFrom",fields:[workingId],references:[id],onDelete:Restrict)
+ weekday Int
+ kind String
+ targetWorkingId String? @db.Uuid
+ targetWorking WorkingDefinition? @relation("ruleTo",fields:[targetWorkingId],references:[id],onDelete:Restrict)
+ enteredNumber String?
+ offsetDays Int?
+ targetWeekday Int?
+ targetDate DateTime? @db.Date
+ notes String @default("")
+ @@unique([workingId,weekday])
+}
+model WorkingOccurrence {
+ id String @id @default(uuid()) @db.Uuid
+ workingId String @db.Uuid
+ working WorkingDefinition @relation(fields:[workingId],references:[id],onDelete:Restrict)
+ date DateTime @db.Date
+ createdAt DateTime @default(now())
+ assignments RotationAssignment[]
+ outgoing OccurrenceReference? @relation("occFrom")
+ incoming OccurrenceReference[] @relation("occTo")
+ @@unique([workingId,date])
+}
+model OccurrenceReference {
+ id String @id @default(uuid()) @db.Uuid
+ fromId String @unique @db.Uuid
+ from WorkingOccurrence @relation("occFrom",fields:[fromId],references:[id],onDelete:Restrict)
+ toId String? @db.Uuid
+ to WorkingOccurrence? @relation("occTo",fields:[toId],references:[id],onDelete:Restrict)
+ kind String
+ note String
+}
+model PhysicalSet {
+ id String @id @default(uuid()) @db.Uuid
+ serial Int @unique @default(autoincrement())
+ label String @default("")
+ notes String @default("")
+ createdAt DateTime @default(now())
+ assignments RotationAssignment[]
+}
+model RotationAssignment {
+ id String @id @default(uuid()) @db.Uuid
+ physicalSetId String @db.Uuid
+ physicalSet PhysicalSet @relation(fields:[physicalSetId],references:[id],onDelete:Restrict)
+ occurrenceId String @db.Uuid
+ occurrence WorkingOccurrence @relation(fields:[occurrenceId],references:[id],onDelete:Restrict)
+ exclusiveKey String? @unique @db.Uuid
+ active Boolean @default(true)
+ notes String
+ definitionRevision Int
+ createdAt DateTime @default(now())
+ @@unique([physicalSetId,occurrenceId])
 }
 model ResearchNote {
  id String @id @default(uuid()) @db.Uuid
- diagramId String @db.Uuid
- diagram Diagram @relation(fields: [diagramId], references: [id], onDelete: Restrict)
+ workingId String @db.Uuid
+ working WorkingDefinition @relation(fields:[workingId],references:[id],onDelete:Restrict)
  text String
  createdAt DateTime @default(now())
 }
-
-model AnalysisScenario {
+model AuditEvent {
  id String @id @default(uuid()) @db.Uuid
- name String
- startDate DateTime @db.Date
- endDate DateTime @db.Date
- diagramIds String[] @db.Uuid
- assumptions String
+ entityId String @db.Uuid
+ entityType String
+ action String
+ reason String
+ before Json?
+ after Json?
  createdAt DateTime @default(now())
- transitions DiagramTransition[]
- rotations Rotation[]
-}
-model DiagramTransition {
- id String @id @default(uuid()) @db.Uuid
- scenarioId String @db.Uuid
- scenario AnalysisScenario @relation(fields: [scenarioId], references: [id], onDelete: Restrict)
- fromId String @db.Uuid
- from Diagram @relation("transitionFrom", fields: [fromId], references: [id], onDelete: Restrict)
- toId String @db.Uuid
- to Diagram @relation("transitionTo", fields: [toId], references: [id], onDelete: Restrict)
- dayOffset Int @default(1)
- confidence String @default("Unknown")
- decision String @default("Pending")
- kind String @default("Direct")
- checks Json
- evidenceId String? @db.Uuid
- transferMovementId String? @db.Uuid
- rationale String @default("")
- createdAt DateTime @default(now())
- updatedAt DateTime @updatedAt
- @@unique([scenarioId, fromId, toId, dayOffset])
-}
-model Rotation {
- stepRecords RotationStep[]
- id String @id @default(uuid()) @db.Uuid
- scenarioId String @db.Uuid
- scenario AnalysisScenario @relation(fields: [scenarioId], references: [id], onDelete: Restrict)
- name String
- physicalSetId String? @db.Uuid
- steps Json
- repeats Boolean @default(false)
- periodDays Int?
- status String
- notes String
- createdAt DateTime @default(now())
-}
-
-model TrainService {
- id String @id @default(uuid()) @db.Uuid
- documentId String @db.Uuid
- document Document @relation(fields: [documentId], references: [id], onDelete: Restrict)
- publishedNumber String?
- description String @default("")
- operatingDays String[] @default([])
- notes String @default("")
- createdAt DateTime @default(now())
- entries TimetableEntry[]
- links MovementServiceLink[]
-}
-model TimetableEntry {
- id String @id @default(uuid()) @db.Uuid
- serviceId String @db.Uuid
- service TrainService @relation(fields: [serviceId], references: [id], onDelete: Restrict)
- stationId String @db.Uuid
- station Station @relation(fields: [stationId], references: [id], onDelete: Restrict)
- sequence Int
- arrivalMinutes Int?
- departureMinutes Int?
- pageId String? @db.Uuid
- originalText String @default("")
- @@unique([serviceId, sequence])
-}
-model MovementServiceLink {
- id String @id @default(uuid()) @db.Uuid
- movementId String @db.Uuid
- movement Movement @relation(fields: [movementId], references: [id], onDelete: Restrict)
- serviceId String @db.Uuid
- service TrainService @relation(fields: [serviceId], references: [id], onDelete: Restrict)
- decision String @default("Pending")
- discrepancies Json
- notes String @default("")
- createdAt DateTime @default(now())
- @@unique([movementId, serviceId])
-}
-model ImportBatch {
- id String @id @default(uuid()) @db.Uuid
- documentId String @db.Uuid
- format String
- payload Json
- issues Json
- status String @default("Preview")
- createdAt DateTime @default(now())
- committedAt DateTime?
- records ImportRecord[]
-}
-model ImportRecord {
- id String @id @default(uuid()) @db.Uuid
- batchId String @db.Uuid
- batch ImportBatch @relation(fields: [batchId], references: [id], onDelete: Restrict)
- serviceId String @db.Uuid
- rowKey String
-}
-model ExportBatch {
- id String @id @default(uuid()) @db.Uuid
- format String
- schemaVersion String
- payload Json
- warnings Json
- sha256 String
- createdAt DateTime @default(now())
-}
-
-model RotationStep {
- id String @id @default(uuid()) @db.Uuid
- rotationId String @db.Uuid
- rotation Rotation @relation(fields: [rotationId], references: [id], onDelete: Restrict)
- diagramId String @db.Uuid
- diagram Diagram @relation(fields: [diagramId], references: [id], onDelete: Restrict)
- sequence Int
- dayOffset Int
- @@unique([rotationId, sequence])
+ @@index([entityId,createdAt])
 }

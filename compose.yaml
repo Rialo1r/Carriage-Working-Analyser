@@ -1,53 +1,39 @@
-name: lner-carriage-analyser
+name: lner-rotation-planner
 services:
   db:
     image: postgres:16-bookworm
     environment:
-      POSTGRES_USER: lner
-      POSTGRES_PASSWORD: lner_local_only
-      POSTGRES_DB: lner
+      POSTGRES_USER: planner
+      POSTGRES_PASSWORD: planner_local_only
+      POSTGRES_DB: planner
     volumes:
-      - database:/var/lib/postgresql/data
+      - planner-postgres:/var/lib/postgresql/data
     healthcheck:
-      test: [CMD-SHELL, pg_isready -U lner -d lner]
+      test: [CMD-SHELL, pg_isready -U planner -d planner]
       interval: 3s
       timeout: 3s
-      retries: 20
+      retries: 30
   app:
-    image: lner-analyser:local
+    image: lner-rotation-planner:phase1
     build: .
     ports:
-      - "127.0.0.1:3000:3000"
+      - "127.0.0.1:${PLANNER_PORT:-4310}:4310"
     environment:
-      DATABASE_URL: postgresql://lner:lner_local_only@db:5432/lner
-      STORAGE_DIR: /data
+      DATABASE_URL: postgresql://planner:planner_local_only@db:5432/planner
+      PORT: 4310
+    depends_on:
+      db:
+        condition: service_healthy
     healthcheck:
       test:
         [
           CMD,
           node,
           -e,
-          "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+          "fetch('http://127.0.0.1:4310/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
         ]
       interval: 5s
       timeout: 3s
-      retries: 20
-    volumes:
-      - documents:/data
-    depends_on:
-      db:
-        condition: service_healthy
-  worker:
-    image: lner-analyser:local
-    command: [npm, run, worker]
-    environment:
-      DATABASE_URL: postgresql://lner:lner_local_only@db:5432/lner
-      STORAGE_DIR: /data
-    volumes:
-      - documents:/data
-    depends_on:
-      app:
-        condition: service_healthy
+      retries: 30
 volumes:
-  database:
-  documents:
+  planner-postgres:

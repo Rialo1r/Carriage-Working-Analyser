@@ -1,55 +1,114 @@
-# LNER Carriage Working Analyser
+# LNER Carriage Working & Rotation Planner
 
-A standalone, personal research application for digitising historical carriage workings and reconstructing possible multi-day stock rotations. React/TypeScript, Node/TypeScript, PostgreSQL, Prisma, PDF.js, local Tesseract OCR and Docker Compose.
+**Fresh application — Phase 1: manual data entry.** React/TypeScript, Node.js, PostgreSQL, Prisma and Docker Compose. No OCR, AI extraction, document upload or PDF processing. No Railway Operations Manager connection.
 
-**Separate application and database. No connection to Railway Operations Manager. No paid cloud services. Routine operation is offline after installation.**
+This replaces the previous carriage analyser's application files. The previous version remains in Git history. Use a freshly extracted download; do not overlay old files or reuse the analyser's database volume.
 
-## Download and try the test setup
+## Windows 11 — start here
 
-Download this GitHub repository as a ZIP, extract it, install Docker Desktop for Windows 11 with Linux containers enabled, and open PowerShell in the extracted folder:
-
-```powershell
-docker compose -f compose.demo.yaml up -d --build --wait --wait-timeout 180
-```
-
-Open `http://localhost:3001` on your computer. The demo includes **fictional** York–Scarborough workings, source PDFs, a three-day rotation, carriage formations and a mismatched 1937 timetable candidate. All are labelled synthetic. It uses separate database and document volumes from your research instance.
-
-[Full test walkthrough](docs/TEST-SETUP.md). Optional PowerShell helpers are in `scripts/`.
-
-## Start your empty research instance
+1. Install/start Docker Desktop with **Linux containers** enabled.
+2. Download the repository's `main` branch ZIP from GitHub and choose **Extract All**.
+3. Open PowerShell **inside the extracted `Carriage-Working-Analyser-main` folder**. Verify the file is present:
 
 ```powershell
+Get-Location
+Get-ChildItem .\compose.yaml
 docker compose up -d --build --wait --wait-timeout 180
 ```
 
-Open `http://localhost:3000`. No historical data is preloaded. Ports bind to loopback for personal use; PostgreSQL is not exposed to the host. This is a single-researcher application without login, intended for a trusted personal machine.
+4. Open **http://localhost:4310** on your computer.
 
-Later starts: `docker compose up -d --no-build --wait`. Stop: `docker compose stop`. Database and original documents persist in named volumes. **Do not use `docker compose down -v` on research data.**
+Do not run these commands from your Railway Operations Manager folder. This version uses **`compose.yaml`**, not the old `compose.demo.yaml`. If PowerShell cannot find the file, run `Get-ChildItem C:\Railway -Filter compose.yaml -Recurse` and navigate to the planner's extracted folder.
 
-## Research workflow
+Optional helper: `./scripts/Start-Planner.ps1` when local PowerShell script execution is enabled. The Docker command above works without enabling script execution.
 
-1. **Documents:** upload an unencrypted PDF up to 100 MB. Record title, source date, operating period, region and description. View/zoom pages and record printed page labels independently of PDF indices.
-2. **OCR:** select only relevant pages. Rotate sideways scans; drag a crop around a table/entry. Choose an OCR layout, queue local recognition, review the rendered crop and raw text, and save corrected transcription revisions. Rules suggest corrections without silently changing evidence. Reruns create separate jobs. Search raw and corrected text for station, train and diagram references.
-3. **Diagrams:** create selected source-linked workings with incomplete fields allowed. Add/edit multiple movements, intermediate station calls, original time notation, operating days, date exceptions, composition requirements and attach/detach instructions. View the timeline, layovers and conflicts. Times are minutes from service-day midnight; explicit next-day times can be entered as `24:20`. Unknown stays unknown.
-4. **Formations:** record carriage types, anonymous quantities or identified vehicles and physical stock research identities. Assign a formation to a dated/scenario-day operation; a diagram number never permanently identifies that stock.
-5. **Rotations:** choose diagrams and an explicit date scenario with documented assumptions. Suggest connections; inspect calendar, station, time, composition and source-period checks. Approve/reject manually with reasons. Confirmed links require a source citation. Missing transfers remain gaps. Build rotations only from approved links; branches, conflicts and unsupported recurrence remain review issues.
-6. **Station Analysis / Unresolved:** inspect starts, finishes, intermediate calls and reviewed/candidate links. York, Scarborough and Huttons Ambo are focus shortcuts. Search also recognises registered aliases.
-7. **Timetable:** enter source-specific services manually, or preview CSV/JSON imports before committing them. Match movement candidates and review route, times, operating days and source dates. Matching 1937/1939 train numbers never automatically merge records.
-8. **Export Centre:** preview verified-only or explicitly unverified research snapshots, then download exactly that JSON/CSV snapshot. Source references, statuses, formations, intermediate calls and rotations are retained. [Future integration contract](docs/INTEGRATION.md).
+First build needs Internet access for images/packages. Routine use after installation is local and offline. Later starts can use:
 
-Original PDFs remain unchanged and are SHA-256 recorded. Important changes are audited. Material diagram/movement edits invalidate a prior verified state; verification history remains. There are no source-deletion endpoints.
+```powershell
+docker compose up -d --no-build --wait
+```
 
-### Limits requiring historical review
+Stop: `docker compose stop`. The PostgreSQL volume retains your entries. **Never run `docker compose down -v` on your research setup.**
 
-OCR provides text blocks and confidence, not verified railway facts. Tiny print, ligatures, poor contrast and complex columns can defeat Tesseract. Crop and rotate before recognition; transcribe manually where needed. Layout/extraction assistance creates a draft working from text you select; it does not reconstruct historical stock identities automatically.
+## First research entries
 
-Calendar analysis supports weekday rules and dated exceptions within a bounded scenario. Conditional historical phrases must be resolved into those rules or retained as uncertainty notes. A recurring circuit requires compatible weekday shifts and checks across the scenario; it is not a claim beyond that period. Missing diagrams or transfers are not invented. Complex splits/joins require explicit formation assignments and composition changes; competing continuations remain unresolved rather than being flattened into one stock path.
+1. In **Stations & Types**, add station names and carriage types as needed. Names are not silently corrected or merged.
+2. In **Published Diagrams**, add a historical period and published number (`262`, `822A`, etc.). A number can exist in different periods or as separately identified source records.
+3. In **Formations**, optionally record composition. Unknown quantities/positions are allowed. Known formations show an exact total; incomplete formations show only the known minimum. An individual vehicle number requires quantity one.
+4. In **Workings**, choose **Add Working**. Enter the starting/finishing stations, optional times, route, days, special instructions, manually typed source citation and notes. Use **Monday–Friday** or **Repeat Daily** to enter a rule once.
+5. Use **Copy as Saturday variant** or **Copy as Sunday variant** for exceptions. Copying creates a new definition; it does not copy continuation rules or dated exceptions.
+6. In the working detail, enter **Next working / diagram**. A typed number shows alternatives; choose the exact working definition. You may deliberately leave the reference unresolved. Set an elapsed day offset, a particular next weekday or an explicit date. Stabling can have an unknown duration.
+7. Create a permanent **Physical Set** only when you are ready. UUIDs and `CS-0001`-style serials are independent of published numbers and cannot be edited.
+8. In **Weekly Timetable**, choose an actual historical date and build the timetable. Assign physical sets to dated occurrences **manually**. Each following Monday is a different occurrence. Connections are labelled unverified.
 
-Exports are research interchange files, not an implemented Railway Operations Manager importer. Your actual 1937/1939 PDFs have not been supplied for accuracy testing. The Newcastle/Blyth timetable photos in chat have not been imported as York–Scarborough evidence.
+You may save a working without known stations, times, formations or weekday rules. A working without operating weekdays/date inclusions will not appear in the timetable until its calendar is entered.
+
+### Overnight times
+
+Times are local historical clock values, not converted through modern time zones. Enter `00:30` with **finish day offset 1** for a Sunday working finishing early Monday. Day offset 0 means the same operating date. Unknown times remain blank. Phase 1 stores these values; it does not determine whether a connection is possible.
+
+### Calendars and sources
+
+Historical-period bounds and working-calendar bounds are inclusive. Date exceptions override weekday rules inside those bounds. Saturday/Sunday variants are separate definitions, so the same published number can have different endpoints or formations on different days.
+
+Source references are manually typed document title, date and printed page. They are never uploaded or extracted. Citations are retained when a working is edited; add another citation rather than replacing historical evidence silently.
+
+### Phase 1 boundaries
+
+Implemented: catalogue, working edits/copies, weekday/date calendars, formations/variations, attach/detach records, exact continuation selection, distinct dated occurrences, permanent physical IDs, manual allocations, basic weekly/multi-week display and audit history.
+
+The exclusive-occurrence database constraint prevents a second set from silently taking an existing exclusive assignment. Unassignments are retained as inactive records with audit history. Calendar edits do not delete existing manual assignments; the timetable identifies retained assignments outside the current calendar.
+
+**Not implemented:** automatic destination/timing/formation checking, issues dashboard, candidate connection ranking, automatic rotation generation, approval/locking workflow, PDF/Excel/CSV exports. Phase 2 requires your approval. The weekly board does not verify or infer a repeating rotation.
+
+No sample historical data is preloaded. The automated tests use clearly labelled synthetic fixtures in a separate database.
+
+## Containers, ports and persistence
+
+Compose project: `lner-rotation-planner`. Containers use this prefix, a separate network, database `planner`, and volume `lner-rotation-planner_planner-postgres`. PostgreSQL has no host port. The app binds to loopback port **4310**. No previous analyser or Railway Operations Manager volumes are used.
+
+For a different host port in PowerShell:
+
+```powershell
+$env:PLANNER_PORT = '4315'
+docker compose up -d --no-build --wait
+```
+
+This is single-researcher software on a trusted local computer, with no login system. Included database passwords are local-only defaults.
+
+## Backup and restore
+
+All research data is in PostgreSQL; there are no uploaded documents to back up. Backups include audit history, source references, physical-set UUIDs and the serial sequence.
+
+Choose a **new** directory and stop the app for a consistent backup:
+
+```powershell
+New-Item -ItemType Directory -Path .\backups\research-001
+docker compose stop app
+docker compose exec -T db pg_dump -U planner -d planner -Fc -f /tmp/planner.dump
+docker compose cp db:/tmp/planner.dump .\backups\research-001\planner.dump
+docker compose start app
+```
+
+Or run `./scripts/Backup-Planner.ps1`. The copy step avoids corrupting binary dumps with older PowerShell output redirection. Keep backups outside the Docker volume and preferably on another device.
+
+**Restore replaces the target planner database.** First make a separate backup of any current target data. Prefer testing restoration into a separate planner installation/Compose project. Never target Railway Operations Manager or the old analyser database.
+
+With the planner's database running and app stopped:
+
+```powershell
+docker compose stop app
+docker compose cp .\backups\research-001\planner.dump db:/tmp/planner-restore.dump
+docker compose exec -T db pg_restore -U planner -d planner --clean --if-exists --no-owner /tmp/planner-restore.dump
+docker compose start app
+docker compose up -d --no-build --wait
+```
+
+Check the dump/restore command exit codes. Test backups periodically. Windows-specific shell behavior must still be checked on your machine; database backup/restore is tested in Linux Docker during development.
 
 ## Automated tests
 
-Docker-only test setup:
+The test runner uses a separate ephemeral database named `planner_test`. Tests delete **only that disposable database's records** and reject database names without `_test`.
 
 ```powershell
 docker compose build app
@@ -57,64 +116,44 @@ docker compose -f compose.test.yaml up --build --abort-on-container-exit --exit-
 docker compose -f compose.test.yaml down
 ```
 
-GitHub Actions runs TypeScript/build, PostgreSQL integration, local OCR and Chromium browser tests on pushes/pull requests. See [test setup](docs/TEST-SETUP.md).
+Or `./scripts/Test-Planner.ps1`. The test image includes Chromium. The suite covers manual entry/editing, ambiguous references, separate dated Mondays, Sunday-to-Monday reference resolution, explicit overnight offsets, allocation safety, source/audit retention and the browser workflow. These are Phase 1 tests; they do not assert that an automatically reconstructed rotation is historically valid.
 
-## Host development
+GitHub Actions is configured for build, PostgreSQL integration and browser tests. A local pass does not establish a remote Actions result.
 
-Node 22+, PostgreSQL 16, Tesseract English and Poppler are required. Use this existing isolated checkout; do not create a worktree unless explicitly requested.
+## Development
+
+Use the existing isolated checkout; do not create a worktree unless explicitly requested. Node 22+ and PostgreSQL 16 are required for host development:
 
 ```sh
 npm ci
-export DATABASE_URL=postgresql://lner:lner_local_only@127.0.0.1:5432/lner
+export DATABASE_URL=postgresql://planner:planner_local_only@localhost:5432/planner
 npm run db:generate
 npm run db:migrate
 npm run build
 npm start
-# In another terminal, with the same DATABASE_URL / STORAGE_DIR:
-npm run worker
 ```
 
-For live editing, run `npm run dev` and `npm run web`; Vite proxies to port 3000. PowerShell sets variables with `$env:DATABASE_URL = '...'`. `.env.example` documents variables; scripts do not automatically load `.env`.
+PowerShell uses `$env:DATABASE_URL = '...'`. `.env.example` documents names but host scripts do not automatically load it. For live editing, run `npm run dev` and `npm run web` in separate terminals. Vite proxies the API to port 4310.
 
-Tests require a separate disposable database ending in `_test`; **tests clear its records**. Never use your research database:
+Prisma uses the JavaScript query engine and PostgreSQL adapter. SQL migrations are applied transactionally by `server/migrate.ts` with advisory locking and immutable checksums. Do not edit an applied migration or mix Prisma Migrate's history into this runner. The fresh planner migration explicitly rejects the legacy analyser's migration table. Add future phases through additive migrations.
+
+Host test commands, with a disposable PostgreSQL database:
 
 ```sh
-export TEST_DATABASE_URL=postgresql://lner:lner_local_only@127.0.0.1:5432/lner_test
+export TEST_DATABASE_URL=postgresql://planner:planner_test_only@localhost:5433/planner_test
 NODE_ENV=test npm test
 npm run build
 npx playwright install chromium
 NODE_ENV=test npm run test:browser
 ```
 
-An existing Chromium can be selected with `BROWSER_EXECUTABLE_PATH`. Run integration and browser tests sequentially; the browser suites start their own server on port 3100.
+An installed Chromium can be selected with `BROWSER_EXECUTABLE_PATH`. Browser tests start a local server on port 4311.
 
-Prisma 6.19 uses its JavaScript engine and PostgreSQL adapter. CLI generation needs DATABASE_URL even though it does not connect. The CLI adapter path avoids native-engine downloads. Dependency overrides select patched transitive packages; the lockfile is committed. No TLS/checksum checks are disabled.
-
-SQL migrations under `prisma/migrations` run transactionally with an advisory lock and immutable SHA-256 history through `npm run db:migrate`. Do not edit applied migrations or mix Prisma Migrate's history into this runner. Add an additive migration, update `schema.prisma`, regenerate and test it.
-
-## Cloud build proxy
-
-Only in the managed cloud environment, supply its proxy CA as a BuildKit secret:
+Managed cloud builds must preserve proxy CA trust:
 
 ```sh
-docker build --secret id=proxy_ca,src="$CODEX_PROXY_CERT" -t lner-analyser:local .
-docker build --secret id=proxy_ca,src="$CODEX_PROXY_CERT" -f Dockerfile.test -t lner-analyser:tests .
-docker compose -f compose.demo.yaml up -d --no-build --wait
+docker build --secret id=proxy_ca,src="$CODEX_PROXY_CERT" -t lner-rotation-planner:phase1 .
+docker build --secret id=proxy_ca,src="$CODEX_PROXY_CERT" -f Dockerfile.test -t lner-rotation-planner:tests .
 ```
 
-Normal Windows builds need no proxy secret. Package signatures, checksums and TLS stay enabled.
-
-## Backup
-
-Back up both `lner-carriage-analyser_database` and `lner-carriage-analyser_documents`. Stop app and worker while taking a consistent pair; leave PostgreSQL running. Choose a new backup directory:
-
-```powershell
-New-Item -ItemType Directory -Path backups/research-001
-docker compose stop app worker
-docker compose exec -T db pg_dump -U lner -Fc -f /tmp/lner.dump lner
-docker compose cp db:/tmp/lner.dump backups/research-001/lner.dump
-docker compose cp app:/data backups/research-001/documents
-docker compose start app worker
-```
-
-Copying the dump avoids binary corruption from older PowerShell redirection. Test restoring into separate volumes before relying on backups. Windows-specific backup/restore has not been tested in this cloud task.
+Normal Windows Docker builds need no CA secret. TLS, signatures and checksums remain enabled.

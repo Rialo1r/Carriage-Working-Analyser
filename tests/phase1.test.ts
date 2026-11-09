@@ -1,302 +1,537 @@
 import { test } from "node:test";
-import pg from "pg";
 import assert from "node:assert/strict";
-import { PDFDocument } from "pdf-lib";
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import path from "node:path";
-import { buildApp } from "../server/app.js";
-import { migrate } from "../server/migrate.js";
-
-const url = process.env.TEST_DATABASE_URL;
-test("Phase 1 persistence, source integrity, entry, review and isolation", async (t) => {
-  assert.ok(
-    url,
-    "Set TEST_DATABASE_URL to a disposable dedicated test database",
-  );
-  assert.match(
-    new URL(url!).pathname,
-    /_test$/,
-    "Test database name must end in _test",
-  );
-  await migrate(url);
-  await migrate(url);
-  const cleanup = async () => {
-    const c = new pg.Client({ connectionString: url });
-    await c.connect();
-    try {
-      await c.query(
-        'TRUNCATE TABLE \"Document\", \"Station\", \"Diagram\", \"AuditEvent\" CASCADE',
-      );
-    } finally {
-      await c.end();
-    }
-  };
-  await cleanup();
-  const storage = await mkdtemp(path.join(tmpdir(), "lner-test-"));
-  let instance = await buildApp({
-    databaseUrl: url,
-    storageDir: storage,
-    serveWeb: false,
-  });
-  const call = async (
-    method: any,
-    url: string,
-    payload?: Record<string, unknown>,
-  ) =>
-    instance.app.inject({
+import { setup } from "./helpers.js";
+import { onCalendar, targetDate, formationCount } from "../server/calendar.js";
+test("Phase 1 manual working data, exact references and dated weekly timetable", async (t) => {
+  const { app, db } = await setup();
+  const call = (method: any, path: string, payload?: any) =>
+    app.inject({
       method,
-      url: "/api" + url,
+      url: "/api" + path,
       ...(payload === undefined ? {} : { payload }),
     });
-  let docId = "",
-    fileId = "",
-    pageId = "",
+  let periodId = "",
     diagramId = "",
-    stationId = "";
+    workingId = "",
+    satId = "",
+    sunId = "",
+    scarborough = "",
+    hull = "",
+    neville = "",
+    formationId = "",
+    setId = "",
+    workingRevision = 1;
+  const all = [0, 1, 2, 3, 4, 5, 6];
   try {
     await t.test(
-      "rejects invalid PDF without creating source records",
+      "catalogue and physical identities are independent of published numbers",
       async () => {
-        const boundary = "lner-invalid";
-        const payload = `--${boundary}\r\nContent-Disposition: form-data; name="title"\r\n\r\nInvalid\r\n--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="bad.pdf"\r\nContent-Type: application/pdf\r\n\r\nnot a pdf\r\n--${boundary}--\r\n`;
-        const r = await instance.app.inject({
-          method: "POST",
-          url: "/api/documents",
-          headers: {
-            "content-type": `multipart/form-data; boundary=${boundary}`,
-          },
-          payload,
-        });
-        assert.equal(r.statusCode, 400);
-      },
-    );
-    const pdf = await PDFDocument.create();
-    pdf.addPage([300, 400]);
-    pdf.addPage([300, 400]);
-    const bytes = Buffer.from(await pdf.save());
-    await t.test(
-      "uploads original PDF and creates stable one-based page records",
-      async () => {
-        const boundary = "lner-source";
-        const payload = Buffer.concat([
-          Buffer.from(
-            `--${boundary}\r\nContent-Disposition: form-data; name="title"\r\n\r\nSynthetic test source (not historical)\r\n--${boundary}\r\nContent-Disposition: form-data; name="sourceDate"\r\n\r\n1939\r\n--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="fixture.pdf"\r\nContent-Type: application/pdf\r\n\r\n`,
-          ),
-          bytes,
-          Buffer.from(`\r\n--${boundary}--\r\n`),
-        ]);
-        const r = await instance.app.inject({
-          method: "POST",
-          url: "/api/documents",
-          headers: {
-            "content-type": `multipart/form-data; boundary=${boundary}`,
-          },
-          payload,
-        });
-        assert.equal(r.statusCode, 201, r.body);
-        const d = r.json();
-        docId = d.id;
-        fileId = d.files[0].id;
-        pageId = d.files[0].pages[0].id;
-        assert.equal(d.files[0].pageCount, 2);
-        assert.deepEqual(
-          (await call("GET", "/files/" + fileId)).rawPayload,
-          bytes,
-        );
+        periodId = (
+          await call("POST", "/periods", {
+            name: "SYNTHETIC 1939 test period",
+            startDate: "1939-01-01",
+            endDate: "1939-12-31",
+          })
+        ).json().id;
+        diagramId = (
+          await call("POST", "/diagrams", { periodId, number: "262" })
+        ).json().id;
+        scarborough = (
+          await call("POST", "/stations", { name: "Scarborough" })
+        ).json().id;
+        hull = (await call("POST", "/stations", { name: "Hull" })).json().id;
+        neville = (
+          await call("POST", "/stations", { name: "Neville Hill" })
+        ).json().id;
+        assert.equal(await db.physicalSet.count(), 0);
+        const a = (
+          await call("POST", "/physical-sets", { label: "Synthetic stock" })
+        ).json();
+        setId = a.id;
+        assert.match(a.code, /^CS-\d{4,}$/);
+        assert.notEqual(a.code, "262");
         assert.equal(
-          (await call("PATCH", "/pages/" + pageId, { printedLabel: "96" }))
-            .statusCode,
-          200,
-        );
-      },
-    );
-    await t.test(
-      "saves incomplete diagrams without assuming physical stock",
-      async () => {
-        const r = await call("POST", "/diagrams", {});
-        assert.equal(r.statusCode, 201, r.body);
-        diagramId = r.json().id;
-        const d = (await call("GET", "/diagrams/" + diagramId)).json();
-        assert.equal(d.publishedNumber, null);
-        assert.equal(await instance.db.operationAssignment.count(), 0);
-      },
-    );
-    await t.test(
-      "duplicate published numbers stay distinct across sources",
-      async () => {
-        const a = await call("POST", "/diagrams", {
-          publishedNumber: "015",
-          documentId: docId,
-        });
-        const b = await call("POST", "/diagrams", { publishedNumber: "015" });
-        assert.equal(a.statusCode, 201);
-        assert.equal(b.statusCode, 201);
-        assert.notEqual(a.json().id, b.json().id);
-      },
-    );
-    await t.test(
-      "invalid enums and nonexistent references cannot corrupt research data",
-      async () => {
-        assert.equal(
-          (await call("POST", "/diagrams", { operatingDays: ["Inventedday"] }))
-            .statusCode,
+          (
+            await call("POST", "/physical-sets", {
+              serial: 999,
+              label: "Invalid override",
+            })
+          ).statusCode,
           400,
         );
+        const other = (
+          await call("POST", "/periods", { name: "SYNTHETIC 1937 period" })
+        ).json();
         assert.equal(
           (
             await call("POST", "/diagrams", {
-              documentId: "00000000-0000-4000-8000-000000000000",
+              periodId: other.id,
+              number: "262",
             })
           ).statusCode,
-          409,
+          201,
         );
       },
     );
     await t.test(
-      "movement times and edits persist without inferred overnight offsets",
+      "known and incomplete formation totals do not invent quantities",
       async () => {
-        stationId = (
-          await call("POST", "/stations", {
-            name: "Synthetic test station",
-            aliases: ["Synthetic alias"],
-          })
-        ).json().id;
-        const r = await call("POST", "/diagrams/" + diagramId + "/movements", {
-          sequence: 1,
-          originId: stationId,
-          departureMinutes: 1430,
-          arrivalMinutes: 1460,
-          trainNumber: "001",
+        const type = (
+          await call("POST", "/types", { name: "Brake Third", code: "BT" })
+        ).json();
+        const f = await call("POST", "/formations", {
+          name: "Synthetic four-coach formation",
+          completeness: "Known",
+          members: [{ typeId: type.id, quantity: 4, position: 1 }],
         });
-        assert.equal(r.statusCode, 201, r.body);
-        const id = r.json().id;
+        assert.equal(f.statusCode, 201, f.body);
+        formationId = f.json().id;
+        assert.equal(f.json().count.total, 4);
         assert.equal(
-          (
-            await call("PUT", "/movements/" + id, {
-              sequence: 1,
-              originId: stationId,
-              departureMinutes: 1430,
-              arrivalMinutes: 1465,
-              trainNumber: "001",
-            })
-          ).statusCode,
-          200,
-        );
-        assert.equal(
-          (await call("GET", "/diagrams/" + diagramId)).json().movements[0]
-            .arrivalMinutes,
-          1465,
+          formationCount({
+            completeness: "Incomplete",
+            members: [{ quantity: 4 }, { quantity: null }],
+          }).total,
+          null,
         );
         assert.equal(
           (
-            await call("POST", "/diagrams/" + diagramId + "/movements", {
-              sequence: 1,
-            })
-          ).statusCode,
-          409,
-        );
-      },
-    );
-    await t.test(
-      "optimistic diagram revision protects against stale saves",
-      async () => {
-        assert.equal(
-          (
-            await call("PUT", "/diagrams/" + diagramId, {
-              revision: 3,
-              title: "Corrected research title",
-            })
-          ).statusCode,
-          200,
-        );
-        assert.equal(
-          (
-            await call("PUT", "/diagrams/" + diagramId, {
-              revision: 1,
-              title: "Stale title",
-            })
-          ).statusCode,
-          404,
-        );
-        assert.equal(
-          (await call("GET", "/diagrams/" + diagramId)).json().title,
-          "Corrected research title",
-        );
-      },
-    );
-    await t.test(
-      "verification requires evidence and maintains audit history",
-      async () => {
-        assert.equal(
-          (
-            await call("POST", "/diagrams/" + diagramId + "/verification", {
-              status: "Verified against source",
-              notes: "Check",
+            await call("POST", "/formations", {
+              name: "Invalid known formation",
+              completeness: "Known",
+              members: [{ quantity: null }],
             })
           ).statusCode,
           400,
         );
         assert.equal(
           (
-            await call("POST", "/diagrams/" + diagramId + "/evidence", {
-              pageId,
-              originalText: "Buttons Ambo",
-              transcription: "Huttons Ambo",
-              notes: "Synthetic OCR example, not historical evidence",
+            await call("POST", "/formations", {
+              name: "Invalid identified quantity",
+              completeness: "Known",
+              members: [{ quantity: 2, vehicleNumber: "SYNTHETIC" }],
+            })
+          ).statusCode,
+          400,
+        );
+      },
+    );
+    const base = () => ({
+      diagramId,
+      startStationId: scarborough,
+      finishStationId: scarborough,
+      startMinutes: 480,
+      finishMinutes: 1080,
+      formationId,
+      routeText: "Via Hull",
+      routeCalls: [{ stationId: hull, sequence: 1 }],
+      calendar: { weekdays: [0, 1, 2, 3, 4] },
+      instructions: [{ weekdays: [], text: "SYNTHETIC SF attached" }],
+      sources: [
+        { title: "SYNTHETIC fixture — not historical evidence", page: "96" },
+      ],
+    });
+    await t.test(
+      "one weekday definition saves once and allows Saturday/Sunday variants",
+      async () => {
+        const weekday = await call("POST", "/workings", {
+          ...base(),
+          label: "Monday–Friday",
+        });
+        assert.equal(weekday.statusCode, 201, weekday.body);
+        workingId = weekday.json().id;
+        const sat = await call("POST", "/workings", {
+          ...base(),
+          label: "Saturday",
+          finishStationId: neville,
+          calendar: { weekdays: [5] },
+        });
+        assert.equal(sat.statusCode, 201, sat.body);
+        satId = sat.json().id;
+        const sundayDiagram = (
+          await call("POST", "/diagrams", { periodId, number: "822A" })
+        ).json();
+        const sun = await call("POST", "/workings", {
+          ...base(),
+          diagramId: sundayDiagram.id,
+          label: "Sunday",
+          startStationId: neville,
+          calendar: { weekdays: [6] },
+          instructions: [{ weekdays: [], text: "SYNTHETIC no SF" }],
+        });
+        assert.equal(sun.statusCode, 201, sun.body);
+        sunId = sun.json().id;
+        assert.equal(await db.workingDefinition.count(), 3);
+        assert.equal(await db.rotationAssignment.count(), 0);
+      },
+    );
+    await t.test(
+      "ambiguous diagram numbers return alternatives; no target is selected automatically",
+      async () => {
+        const c = await call(
+          "GET",
+          "/working-candidates?number=262&periodId=" + periodId,
+        );
+        assert.equal(c.json().length, 2);
+        const unresolved = await call(
+          "PUT",
+          "/workings/" + workingId + "/next",
+          {
+            reason: "Retain unresolved source reference",
+            rules: [
+              {
+                weekday: 0,
+                kind: "TARGET",
+                enteredNumber: "262",
+                offsetDays: 1,
+              },
+            ],
+          },
+        );
+        assert.equal(unresolved.statusCode, 200, unresolved.body);
+        assert.equal(unresolved.json().nextRules[0].targetWorkingId, null);
+        const save = await call("PUT", "/workings/" + workingId + "/next", {
+          reason: "Choose exact weekday variant",
+          rules: [0, 1, 2, 3]
+            .map((weekday) => ({
+              weekday,
+              kind: "TARGET",
+              targetWorkingId: workingId,
+              enteredNumber: "262",
+              offsetDays: 1,
+            }))
+            .concat([
+              {
+                weekday: 4,
+                kind: "TARGET",
+                targetWorkingId: satId,
+                enteredNumber: "262",
+                offsetDays: 1,
+              },
+            ]),
+        });
+        assert.equal(save.statusCode, 200, save.body);
+        await call("PUT", "/workings/" + satId + "/next", {
+          reason: "Synthetic Sunday continuation",
+          rules: [
+            {
+              weekday: 5,
+              kind: "TARGET",
+              targetWorkingId: sunId,
+              offsetDays: 1,
+            },
+          ],
+        });
+        await call("PUT", "/workings/" + sunId + "/next", {
+          reason: "Synthetic following Monday continuation",
+          rules: [
+            {
+              weekday: 6,
+              kind: "TARGET",
+              targetWorkingId: workingId,
+              targetWeekday: 0,
+            },
+          ],
+        });
+      },
+    );
+    await t.test(
+      "two-week expansion is idempotent and keeps each Monday distinct",
+      async () => {
+        const materialize = () =>
+          call("POST", "/timetable/materialize", {
+            start: "1939-07-03",
+            weeks: 2,
+          });
+        assert.equal((await materialize()).statusCode, 200);
+        const count = await db.workingOccurrence.count();
+        assert.equal((await materialize()).statusCode, 200);
+        assert.equal(await db.workingOccurrence.count(), count);
+        const rows = (
+          await call("GET", "/timetable?start=1939-07-03&weeks=2")
+        ).json().occurrences;
+        assert.equal(rows.length, 14);
+        assert.equal(
+          rows.filter((o: any) => o.working.diagram.number === "262").length,
+          12,
+        );
+        const mon = rows.find((o: any) => o.date.startsWith("1939-07-03")),
+          nextMon = rows.find((o: any) => o.date.startsWith("1939-07-10"));
+        assert.notEqual(mon.id, nextMon.id);
+        const sunday = rows.find((o: any) => o.date.startsWith("1939-07-09"));
+        assert.equal(sunday.outgoing.toId, nextMon.id);
+        assert.ok(
+          rows
+            .filter(
+              (o: any) =>
+                o.date.startsWith("1939-07-0") &&
+                !o.date.startsWith("1939-07-09"),
+            )
+            .every((o: any) =>
+              o.instructions.some(
+                (i: any) => i.text === "SYNTHETIC SF attached",
+              ),
+            ),
+        );
+        assert.equal(sunday.instructions[0].text, "SYNTHETIC no SF");
+        assert.ok(
+          rows.every((o: any) => o.connectionStatus.startsWith("Unverified")),
+        );
+      },
+    );
+    await t.test(
+      "manual assignment is atomic, keeps physical ID stable and never silently reallocates",
+      async () => {
+        const occurrence = await db.workingOccurrence.findUniqueOrThrow({
+          where: {
+            workingId_date: { workingId, date: new Date("1939-07-03") },
+          },
+        });
+        const other = (
+          await call("POST", "/physical-sets", {
+            label: "Other synthetic stock",
+          })
+        ).json();
+        const results = await Promise.all([
+          call("POST", "/assignments", {
+            physicalSetId: setId,
+            occurrenceId: occurrence.id,
+            notes: "Manual synthetic allocation",
+          }),
+          call("POST", "/assignments", {
+            physicalSetId: other.id,
+            occurrenceId: occurrence.id,
+            notes: "Competing allocation",
+          }),
+        ]);
+        assert.deepEqual(results.map((r) => r.statusCode).sort(), [201, 409]);
+        assert.equal(
+          await db.rotationAssignment.count({
+            where: { occurrenceId: occurrence.id, active: true },
+          }),
+          1,
+        );
+        const assigned = await db.rotationAssignment.findFirstOrThrow({
+          where: { occurrenceId: occurrence.id, active: true },
+        });
+        assert.equal(
+          (
+            await call("DELETE", "/assignments/" + assigned.id, {
+              reason: "Remove manual test allocation",
+            })
+          ).statusCode,
+          200,
+        );
+        assert.equal(
+          (
+            await db.rotationAssignment.findUniqueOrThrow({
+              where: { id: assigned.id },
+            })
+          ).active,
+          false,
+        );
+        assert.equal(
+          (
+            await call("POST", "/assignments", {
+              physicalSetId: setId,
+              occurrenceId: occurrence.id,
+              notes: "Manual reallocation",
+            })
+          ).statusCode,
+          201,
+        );
+        assert.equal(
+          await db.rotationAssignment.count({
+            where: { occurrenceId: occurrence.id, active: true },
+          }),
+          1,
+        );
+      },
+    );
+    await t.test(
+      "edits, sources, exceptions and stale revisions are preserved correctly",
+      async () => {
+        const before = (await call("GET", "/workings/" + workingId)).json();
+        workingRevision = before.revision;
+        const edited = await call("PUT", "/workings/" + workingId, {
+          ...base(),
+          sources: [],
+          label: "Corrected weekday working",
+          revision: workingRevision,
+          reason: "Synthetic manual correction",
+          calendar: {
+            weekdays: [0, 1, 2, 3, 4],
+            exceptions: [
+              {
+                date: "1939-07-04",
+                operates: false,
+                notes: "Synthetic exception",
+              },
+            ],
+          },
+        });
+        assert.equal(edited.statusCode, 200, edited.body);
+        assert.equal(edited.json().sources.length, 1);
+        assert.equal(
+          (
+            await call("PUT", "/workings/" + workingId, {
+              ...base(),
+              sources: [],
+              revision: workingRevision,
+              reason: "Stale save",
+            })
+          ).statusCode,
+          409,
+        );
+        const history = (
+          await call("GET", "/history?entityId=" + workingId)
+        ).json();
+        const event = history.find((e: any) => e.action === "Edited");
+        assert.equal(event.before.label, "Monday–Friday");
+        assert.equal(event.after.label, "Corrected weekday working");
+        assert.equal(
+          onCalendar(edited.json().calendar, new Date("1939-07-04")),
+          false,
+        );
+        const dbSet = await db.physicalSet.findUniqueOrThrow({
+          where: { id: setId },
+        });
+        assert.ok(dbSet.serial > 0);
+        assert.equal(
+          (await call("GET", "/workings/" + workingId)).json().startStationId,
+          scarborough,
+        );
+      },
+    );
+    await t.test(
+      "stabling, same-day and overnight references retain explicit dates without continuity claims",
+      async () => {
+        assert.equal(
+          targetDate(new Date("1939-07-09"), { targetWeekday: 0 })
+            ?.toISOString()
+            .slice(0, 10),
+          "1939-07-10",
+        );
+        assert.equal(
+          targetDate(new Date("1939-07-03"), { offsetDays: 0 })
+            ?.toISOString()
+            .slice(0, 10),
+          "1939-07-03",
+        );
+        const w = await call("POST", "/workings", {
+          diagramId,
+          label: "Synthetic overnight",
+          startMinutes: 1380,
+          finishMinutes: 30,
+          finishDayOffset: 1,
+          calendar: { weekdays: [6] },
+        });
+        assert.equal(w.statusCode, 201, w.body);
+        assert.equal(w.json().finishDayOffset, 1);
+        const s = await call("PUT", "/workings/" + w.json().id + "/next", {
+          reason: "Synthetic stabling instruction",
+          rules: [
+            {
+              weekday: 6,
+              kind: "STABLED",
+              offsetDays: 2,
+              notes: "Remain stabled; no transfer inferred",
+            },
+          ],
+        });
+        assert.equal(s.statusCode, 200);
+        assert.equal(s.json().nextRules[0].targetWorkingId, null);
+        assert.equal(await db.physicalSet.count(), 2);
+      },
+    );
+    await t.test(
+      "day-specific formation variations and changes remain manual records",
+      async () => {
+        const u = (
+          await call("POST", "/formations", {
+            name: "Unknown Sunday composition",
+            completeness: "Unknown",
+            members: [],
+          })
+        ).json();
+        assert.equal(
+          (
+            await call("PUT", "/workings/" + sunId + "/variations", {
+              weekday: 6,
+              formationId: u.id,
+              notes: "Synthetic Sunday variation",
+            })
+          ).statusCode,
+          200,
+        );
+        assert.equal(
+          (
+            await call("POST", "/workings/" + satId + "/changes", {
+              weekdays: [5],
+              action: "Detach",
+              stage: "Finish",
+              quantity: 1,
+              notes: "Synthetic change; no compatibility calculation",
+            })
+          ).statusCode,
+          201,
+        );
+        const before = await db.rotationAssignment.count();
+        await call("POST", "/timetable/materialize", {
+          start: "1939-07-03",
+          weeks: 1,
+        });
+        const data = (
+          await call("GET", "/timetable?start=1939-07-03&weeks=1")
+        ).json();
+        const sun = data.occurrences.find((o: any) =>
+          o.date.startsWith("1939-07-09"),
+        );
+        assert.equal(sun.formationCount.total, null);
+        assert.equal(await db.rotationAssignment.count(), before);
+      },
+    );
+    await t.test(
+      "unknown values, invalid input and cross-site writes are handled without inference",
+      async () => {
+        assert.equal(
+          (
+            await call("POST", "/workings", {
+              diagramId,
+              calendar: { weekdays: [] },
             })
           ).statusCode,
           201,
         );
         assert.equal(
           (
-            await call("POST", "/diagrams/" + diagramId + "/verification", {
-              status: "Verified against source",
-              notes: "Synthetic source checked for test",
+            await call("POST", "/workings", {
+              diagramId,
+              startMinutes: 1500,
+              calendar: { weekdays: [] },
             })
           ).statusCode,
-          200,
+          400,
         );
-        const d = (await call("GET", "/diagrams/" + diagramId)).json();
-        assert.equal(d.evidence[0].originalText, "Buttons Ambo");
-        assert.equal(d.evidence[0].page.printedLabel, "96");
-        assert.equal(d.verifications.length, 1);
-        assert.ok(
-          (await call("GET", "/diagrams/" + diagramId + "/history")).json()
-            .length >= 5,
+        assert.equal(
+          (
+            await app.inject({
+              method: "POST",
+              url: "/api/physical-sets",
+              headers: { origin: "https://outside.example" },
+              payload: { label: "Rejected" },
+            })
+          ).statusCode,
+          403,
         );
-      },
-    );
-    await t.test("cross-site browser writes are rejected", async () => {
-      const r = await instance.app.inject({
-        method: "POST",
-        url: "/api/diagrams",
-        headers: { origin: "https://other-site.example" },
-        payload: {},
-      });
-      assert.equal(r.statusCode, 403);
-    });
-    await t.test(
-      "sources and research survive application restart unchanged",
-      async () => {
-        await instance.app.close();
-        instance = await buildApp({
-          databaseUrl: url,
-          storageDir: storage,
-          serveWeb: false,
-        });
-        assert.deepEqual(
-          (await call("GET", "/files/" + fileId)).rawPayload,
-          bytes,
+        assert.equal((await call("GET", "/ocr")).statusCode, 404);
+        assert.equal(
+          (await call("POST", "/generate-rotations", {})).statusCode,
+          404,
         );
-        const d = (await call("GET", "/diagrams/" + diagramId)).json();
-        assert.equal(d.status, "Verified against source");
-        assert.equal(d.movements[0].trainNumber, "001");
       },
     );
   } finally {
-    await instance.app.close();
-    await cleanup();
-    await rm(storage, { recursive: true, force: true });
+    await app.close();
   }
 });

@@ -4,7 +4,7 @@ export default defineConfig({
   testMatch: "*.spec.ts",
   workers: 1,
   use: {
-    baseURL: "http://127.0.0.1:3100",
+    baseURL: "http://127.0.0.1:4311",
     headless: true,
     launchOptions: process.env.BROWSER_EXECUTABLE_PATH
       ? { executablePath: process.env.BROWSER_EXECUTABLE_PATH }

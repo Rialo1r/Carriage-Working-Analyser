@@ -1,52 +1,57 @@
 import pg from "pg";
-import { readdir, readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import { createHash } from "node:crypto";
-
-// Transactional SQL migrations with an advisory lock and immutable checksums.
-export async function migrate(connectionString = process.env.DATABASE_URL) {
-  if (!connectionString) throw new Error("DATABASE_URL is required");
-  const client = new pg.Client({ connectionString });
-  await client.connect();
+export async function migrate(url = process.env.DATABASE_URL) {
+  if (!url) throw new Error("DATABASE_URL is required");
+  const c = new pg.Client({ connectionString: url });
+  await c.connect();
   try {
-    await client.query("SELECT pg_advisory_lock(76341801)");
-    await client.query(
-      'CREATE TABLE IF NOT EXISTS "_lner_migrations" (name TEXT PRIMARY KEY, checksum TEXT NOT NULL, applied_at TIMESTAMPTZ NOT NULL DEFAULT now())',
+    await c.query("SELECT pg_advisory_lock(4310001)");
+    const legacy = await c.query(
+      `SELECT to_regclass('public."_lner_migrations"') AS legacy`,
     );
-    const names = (await readdir("prisma/migrations", { withFileTypes: true }))
-      .filter((e) => e.isDirectory())
-      .map((e) => e.name)
-      .sort();
-    for (const name of names) {
-      const sql = await readFile(
-        `prisma/migrations/${name}/migration.sql`,
-        "utf8",
+    if (legacy.rows[0].legacy)
+      throw new Error(
+        "This is the legacy analyser database. Use a fresh planner database.",
       );
-      const checksum = createHash("sha256").update(sql).digest("hex");
-      const existing = await client.query(
-        'SELECT checksum FROM "_lner_migrations" WHERE name=$1',
+    await c.query(
+      'CREATE TABLE IF NOT EXISTS "_planner_migrations" (name TEXT PRIMARY KEY, checksum TEXT NOT NULL, applied_at TIMESTAMPTZ NOT NULL DEFAULT now())',
+    );
+    const dirs = (await readdir("prisma/migrations", { withFileTypes: true }))
+      .filter((d) => d.isDirectory())
+      .map((d) => d.name)
+      .sort();
+    for (const name of dirs) {
+      const sql = await readFile(
+          `prisma/migrations/${name}/migration.sql`,
+          "utf8",
+        ),
+        hash = createHash("sha256").update(sql).digest("hex");
+      const r = await c.query(
+        'SELECT checksum FROM "_planner_migrations" WHERE name=$1',
         [name],
       );
-      if (existing.rowCount) {
-        if (existing.rows[0].checksum !== checksum)
-          throw new Error(`Applied migration changed: ${name}`);
+      if (r.rowCount) {
+        if (r.rows[0].checksum !== hash)
+          throw new Error("Applied migration changed: " + name);
         continue;
       }
-      await client.query("BEGIN");
+      await c.query("BEGIN");
       try {
-        await client.query(sql);
-        await client.query(
-          'INSERT INTO "_lner_migrations" (name,checksum) VALUES ($1,$2)',
-          [name, checksum],
+        await c.query(sql);
+        await c.query(
+          'INSERT INTO "_planner_migrations"(name,checksum) VALUES($1,$2)',
+          [name, hash],
         );
-        await client.query("COMMIT");
-        console.log(`Applied ${name}`);
+        await c.query("COMMIT");
+        console.log("Applied " + name);
       } catch (e) {
-        await client.query("ROLLBACK");
+        await c.query("ROLLBACK");
         throw e;
       }
     }
   } finally {
-    await client.end();
+    await c.end();
   }
 }
 if (process.argv[1]?.endsWith("migrate.ts")) await migrate();

@@ -1,4 +1,4 @@
-name: Application checks
+name: Planner Phase 1 checks
 on:
   push:
   pull_request:
@@ -9,17 +9,17 @@ jobs:
       postgres:
         image: postgres:16-bookworm
         env:
-          POSTGRES_USER: lner
-          POSTGRES_PASSWORD: lner_test_only
-          POSTGRES_DB: lner_test
+          POSTGRES_USER: planner
+          POSTGRES_PASSWORD: planner_test_only
+          POSTGRES_DB: planner_test
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U lner -d lner_test"
-          --health-interval 5s --health-timeout 3s --health-retries 20
+          --health-cmd "pg_isready -U planner -d planner_test"
+          --health-interval 3s --health-timeout 3s --health-retries 30
     env:
-      DATABASE_URL: postgresql://lner:lner_test_only@localhost:5432/lner_test
-      TEST_DATABASE_URL: postgresql://lner:lner_test_only@localhost:5432/lner_test
+      DATABASE_URL: postgresql://planner:planner_test_only@localhost:5432/planner_test
+      TEST_DATABASE_URL: postgresql://planner:planner_test_only@localhost:5432/planner_test
       NODE_ENV: test
     steps:
       - uses: actions/checkout@v4
@@ -27,7 +27,6 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - run: sudo apt-get update && sudo apt-get install -y tesseract-ocr tesseract-ocr-eng poppler-utils
       - run: npm ci
       - run: npm run db:generate
       - run: npm run build
@@ -37,6 +36,6 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: browser-test-results
+          name: planner-browser-results
           path: test-results/
           if-no-files-found: ignore

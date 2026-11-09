@@ -7,6 +7,6 @@ export default defineConfig({
   adapter: async () =>
     new PrismaPg({
       connectionString:
-        process.env.DATABASE_URL || "postgresql://localhost/lner",
+        process.env.DATABASE_URL || "postgresql://localhost/planner",
     }),
 });

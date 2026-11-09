@@ -1,26 +1,25 @@
-name: lner-carriage-tests
+name: lner-rotation-planner-tests
 services:
   db:
     image: postgres:16-bookworm
     environment:
-      POSTGRES_USER: lner
-      POSTGRES_PASSWORD: lner_test_only
-      POSTGRES_DB: lner_test
+      POSTGRES_USER: planner
+      POSTGRES_PASSWORD: planner_test_only
+      POSTGRES_DB: planner_test
     tmpfs:
       - /var/lib/postgresql/data
     healthcheck:
-      test: [CMD-SHELL, pg_isready -U lner -d lner_test]
+      test: [CMD-SHELL, pg_isready -U planner -d planner_test]
       interval: 2s
       timeout: 3s
-      retries: 20
+      retries: 30
   tests:
-    image: lner-analyser:tests
+    image: lner-rotation-planner:tests
     build:
       context: .
       dockerfile: Dockerfile.test
     environment:
-      TEST_DATABASE_URL: postgresql://lner:lner_test_only@db:5432/lner_test
-      STORAGE_DIR: /tmp/lner-test-storage
+      TEST_DATABASE_URL: postgresql://planner:planner_test_only@db:5432/planner_test
     depends_on:
       db:
         condition: service_healthy
