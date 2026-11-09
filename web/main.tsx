@@ -1,3 +1,4 @@
+import {IssueDesk,ChainDesk} from "./Research";
 import React, { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { api, Row, workingLabel, dayLabel, timeLabel, readableResearch } from "./common";
@@ -80,8 +81,10 @@ function App() {
     "Weekly Timetable": "Weekly working timetable",
     Registers: "Stations & carriage types",
     History: "Research history",
+    "Stock Chains":"Physical carriage chains", Issues:"Issues & conflicts",
   };
   const nav = [
+    "Stock Chains", "Issues",
     "Dashboard",
     "Workings",
     "Published Diagrams",
@@ -174,6 +177,8 @@ function App() {
         {catalog&&addSet&&<AddRosterSet catalog={catalog} onClose={()=>setAddSet(false)} onAdded={async d=>{await refresh();addWorking(d.id);}}/>}
         {catalog && (
           <>
+            {tab === "Stock Chains" && <ChainDesk catalog={catalog} openWorking={openWorking}/>}
+            {tab === "Issues" && <IssueDesk catalog={catalog} openWorking={openWorking}/>}
             {tab === "Dashboard" && (
               <>
                 <div className="welcome">

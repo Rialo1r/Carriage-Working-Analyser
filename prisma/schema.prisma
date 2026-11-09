@@ -257,3 +257,92 @@ model DatasetState {
  id String @id
  version Int @default(0)
 }
+model AnalysisRun {
+ id String @id @default(uuid()) @db.Uuid
+ periodId String @db.Uuid
+ startDate DateTime @db.Date
+ endDate DateTime @db.Date
+ inputVersion Int
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ @@unique([periodId,startDate,endDate])
+}
+model ConnectionProposal {
+ id String @id @default(uuid()) @db.Uuid
+ analysisId String @db.Uuid
+ fromId String @db.Uuid
+ toId String @db.Uuid
+ kind String
+ classification String
+ score Int
+ checks Json
+ storage Json?
+ sourceVerified Boolean @default(false)
+ updatedAt DateTime @updatedAt
+ @@unique([analysisId,fromId,toId])
+}
+model ConnectionReview {
+ id String @id @default(uuid()) @db.Uuid
+ fromId String @db.Uuid
+ toId String @db.Uuid
+ decision String
+ reason String
+ updatedAt DateTime @updatedAt
+ @@unique([fromId,toId])
+}
+model ApprovedConnection {
+ id String @id @default(uuid()) @db.Uuid
+ fromId String @db.Uuid
+ toId String @db.Uuid
+ fromKey String? @unique @db.Uuid
+ targetExclusiveKey String? @unique @db.Uuid
+ active Boolean @default(true)
+ reason String
+ snapshot Json
+ createdAt DateTime @default(now())
+ @@unique([fromId,toId])
+}
+model ConnectingMovement {
+ id String @id @default(uuid()) @db.Uuid
+ fromId String @db.Uuid
+ toId String @db.Uuid
+ sequence Int
+ startStationId String? @db.Uuid
+ finishStationId String? @db.Uuid
+ startDate DateTime @db.Date
+ finishDate DateTime @db.Date
+ startMinutes Int?
+ finishMinutes Int?
+ sourceTitle String @default("")
+ sourcePage String @default("")
+ notes String
+ archived Boolean @default(false)
+ @@unique([fromId,toId,sequence])
+}
+model PlanningIssue {
+ id String @id @default(uuid()) @db.Uuid
+ key String @unique
+ analysisId String @db.Uuid
+ code String
+ severity String
+ description String
+ reason String
+ action String
+ fromId String? @db.Uuid
+ toId String? @db.Uuid
+ workingId String? @db.Uuid
+ physicalSetId String? @db.Uuid
+ originalFinding Json
+ details Json
+ active Boolean @default(true)
+ reviewState String @default("Open")
+ firstSeen DateTime @default(now())
+ lastSeen DateTime @default(now())
+}
+model IssueReview {
+ id String @id @default(uuid()) @db.Uuid
+ issueId String @db.Uuid
+ state String
+ note String
+ createdAt DateTime @default(now())
+}

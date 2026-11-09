@@ -1,3 +1,4 @@
+import {registerAnalysis} from "./analysis-routes.js";
 import Fastify from "fastify";
 import staticFiles from "@fastify/static";
 import { z } from "zod";
@@ -89,6 +90,7 @@ export async function buildApp(
   registerManagement(app, db);
   registerWorkings(app, db);
   registerTimetable(app, db);
+  registerAnalysis(app, db);
   if (options.serveWeb !== false) {
     try {
       await access(path.resolve("dist/index.html"));
