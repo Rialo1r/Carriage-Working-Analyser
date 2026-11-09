@@ -120,7 +120,12 @@ export function DiagramPage({
             <h3>{d.number}</h3>
             <p>{d.period.name}</p>
             <p>{d.description}</p>
-            <RecordActions kind="diagrams" row={d} catalog={catalog} onChanged={reload}/>
+            <RecordActions
+              kind="diagrams"
+              row={d}
+              catalog={catalog}
+              onChanged={reload}
+            />
             <button
               onClick={() => {
                 setEdit(d);
@@ -188,8 +193,13 @@ export function PhysicalSets({
               {s.code} <span>{s.label}</span>
             </h3>
             <p>{s.notes}</p>
-            <RecordActions kind="physical-sets" row={s} catalog={catalog} onChanged={reload}/>
-            
+            <RecordActions
+              kind="physical-sets"
+              row={s}
+              catalog={catalog}
+              onChanged={reload}
+            />
+
             <p>
               <button onClick={() => setEdit(s)}>Edit label / notes</button>
             </p>
@@ -199,11 +209,72 @@ export function PhysicalSets({
     </div>
   );
 }
-export function Registers({catalog,reload}:{catalog:Row;reload:()=>Promise<void>}){
- const [dialog,setDialog]=useState<'stations'|'types'|null>(null),[archived,setArchived]=useState(false),[all,setAll]=useState<Row|null>(null);
- async function refresh(){await reload();if(archived)setAll(await api('/catalog?includeArchived=true'));}
- const shown=archived&&all?all:catalog;
- return <><label className="check"><input type="checkbox" checked={archived} onChange={e=>{setArchived(e.target.checked);if(e.target.checked)void api('/catalog?includeArchived=true').then(setAll);}}/>Include archived entries</label><div className="two-columns">{(['stations','types'] as const).map(kind=><section className="panel" key={kind}><div className="section-head"><h2>{kind==='stations'?'Stations':'Carriage types'}</h2><button onClick={()=>setDialog(kind)}>Add {kind==='stations'?'Station':'Carriage Type'}</button></div>{!shown[kind].length&&<p className="empty">No entries yet.</p>}{shown[kind].map((row:Row)=><article key={row.id}><h3>{row.name} {row.code&&`(${row.code})`} {row.archived&&<span className="badge">Archived</span>}</h3><p>{row.notes}</p><RecordActions kind={kind} row={row} catalog={catalog} onChanged={refresh}/></article>)}</section>)}</div>{dialog&&<CatalogDialog kind={dialog} onClose={()=>setDialog(null)} onCreated={refresh}/>}</>;
+export function Registers({
+  catalog,
+  reload,
+}: {
+  catalog: Row;
+  reload: () => Promise<void>;
+}) {
+  const [dialog, setDialog] = useState<"stations" | "types" | null>(null),
+    [archived, setArchived] = useState(false),
+    [all, setAll] = useState<Row | null>(null);
+  async function refresh() {
+    await reload();
+    if (archived) setAll(await api("/catalog?includeArchived=true"));
+  }
+  const shown = archived && all ? all : catalog;
+  return (
+    <>
+      <label className="check">
+        <input
+          type="checkbox"
+          checked={archived}
+          onChange={(e) => {
+            setArchived(e.target.checked);
+            if (e.target.checked)
+              void api("/catalog?includeArchived=true").then(setAll);
+          }}
+        />
+        Include archived entries
+      </label>
+      <div className="two-columns">
+        {(["stations", "types"] as const).map((kind) => (
+          <section className="panel" key={kind}>
+            <div className="section-head">
+              <h2>{kind === "stations" ? "Stations" : "Carriage types"}</h2>
+              <button onClick={() => setDialog(kind)}>
+                Add {kind === "stations" ? "Station" : "Carriage Type"}
+              </button>
+            </div>
+            {!shown[kind].length && <p className="empty">No entries yet.</p>}
+            {shown[kind].map((row: Row) => (
+              <article key={row.id}>
+                <h3>
+                  {row.name} {row.code && `(${row.code})`}{" "}
+                  {row.archived && <span className="badge">Archived</span>}
+                </h3>
+                <p>{row.notes}</p>
+                <RecordActions
+                  kind={kind}
+                  row={row}
+                  catalog={catalog}
+                  onChanged={refresh}
+                />
+              </article>
+            ))}
+          </section>
+        ))}
+      </div>
+      {dialog && (
+        <CatalogDialog
+          kind={dialog}
+          onClose={() => setDialog(null)}
+          onCreated={refresh}
+        />
+      )}
+    </>
+  );
 }
 export function Formations({
   catalog,
@@ -454,7 +525,12 @@ export function Formations({
               </p>
             ))}
             <p>{f.notes}</p>
-            <RecordActions kind="formations" row={f} catalog={catalog} onChanged={reload}/>
+            <RecordActions
+              kind="formations"
+              row={f}
+              catalog={catalog}
+              onChanged={reload}
+            />
             <button onClick={() => load(f)}>Edit formation</button>
             <button onClick={() => load(f, true)}>Use as new version</button>
           </article>

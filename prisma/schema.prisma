@@ -346,3 +346,24 @@ model IssueReview {
  note String
  createdAt DateTime @default(now())
 }
+
+model ChainProposal {
+ id String @id @default(uuid()) @db.Uuid
+ analysisId String @db.Uuid
+ signature String
+ snapshot Json
+ status String @default("Proposed")
+ createdAt DateTime @default(now())
+ @@unique([analysisId, signature])
+}
+model SavedRotation {
+ id String @id @default(uuid()) @db.Uuid
+ proposalId String @unique @db.Uuid
+ physicalSetId String @db.Uuid
+ name String
+ snapshot Json
+ locked Boolean @default(true)
+ active Boolean @default(true)
+ reason String
+ createdAt DateTime @default(now())
+}

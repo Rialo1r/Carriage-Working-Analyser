@@ -1,9 +1,261 @@
-import React,{useState} from 'react';import {Row,api,Modal,SaveForm,Input,Text,SearchSelect,dayLabel,workingLabel,days} from './common';import {RecordActions} from './Management';
-export function AddRosterSet({catalog,onClose,onAdded}:{catalog:Row;onClose:()=>void;onAdded:(diagram:Row)=>Promise<void>}){
- const [period,setPeriod]=useState(catalog.periods[0]?.id||'');
- return <Modal title="Add published roster set" onClose={onClose}><p>Enter the number printed in the roster. The physical stock can work other published numbers on subsequent days.</p><SaveForm title="Add set and enter its working" onSave={async f=>{const v=Object.fromEntries(new FormData(f));let periodId=period;if(!periodId){const p=await api('/periods','POST',{name:v.periodName,notes:'Manually entered roster context'});periodId=p.id;}const d=await api('/diagrams','POST',{number:v.number,periodId,description:v.description});await onAdded(d);onClose();}}><Input label="Published set number" name="number" required placeholder="262, 822A, 735B…"/>{catalog.periods.length?<SearchSelect label="Roster historical period" value={period} onChange={setPeriod} options={catalog.periods.map((p:Row)=>({id:p.id,label:p.name}))} required/>:<Input label="Historical period name" name="periodName" required placeholder="For example: Summer 1939"/>}<Text label="Published set description" name="description"/></SaveForm></Modal>;
+import React, { useState } from "react";
+import {
+  Row,
+  api,
+  Modal,
+  SaveForm,
+  Input,
+  Text,
+  SearchSelect,
+  dayLabel,
+  workingLabel,
+  days,
+} from "./common";
+import { RecordActions } from "./Management";
+export function AddRosterSet({
+  catalog,
+  onClose,
+  onAdded,
+}: {
+  catalog: Row;
+  onClose: () => void;
+  onAdded: (diagram: Row) => Promise<void>;
+}) {
+  const [period, setPeriod] = useState(catalog.periods[0]?.id || "");
+  return (
+    <Modal title="Add published roster set" onClose={onClose}>
+      <p>
+        Enter the number printed in the roster. The physical stock can work
+        other published numbers on subsequent days.
+      </p>
+      <SaveForm
+        title="Add set and enter its working"
+        onSave={async (f) => {
+          const v = Object.fromEntries(new FormData(f));
+          let periodId = period;
+          if (!periodId) {
+            const p = await api("/periods", "POST", {
+              name: v.periodName,
+              notes: "Manually entered roster context",
+            });
+            periodId = p.id;
+          }
+          const d = await api("/diagrams", "POST", {
+            number: v.number,
+            periodId,
+            description: v.description,
+          });
+          await onAdded(d);
+          onClose();
+        }}
+      >
+        <Input
+          label="Published set number"
+          name="number"
+          required
+          placeholder="262, 822A, 735B…"
+        />
+        {catalog.periods.length ? (
+          <SearchSelect
+            label="Roster historical period"
+            value={period}
+            onChange={setPeriod}
+            options={catalog.periods.map((p: Row) => ({
+              id: p.id,
+              label: p.name,
+            }))}
+            required
+          />
+        ) : (
+          <Input
+            label="Historical period name"
+            name="periodName"
+            required
+            placeholder="For example: Summer 1939"
+          />
+        )}
+        <Text label="Published set description" name="description" />
+      </SaveForm>
+    </Modal>
+  );
 }
-export function RosterIndex({catalog,workings,onAdd,onNewSet,onOpen,reload}:{catalog:Row;workings:Row[];onAdd:(diagramId?:string)=>void;onNewSet:()=>void;onOpen:(id:string)=>void;reload:()=>Promise<void>}){
- const [search,setSearch]=useState('');const groups=catalog.diagrams.filter((d:Row)=>{const ws=workings.filter(w=>w.diagramId===d.id);return [d.number,d.description,d.period.name,...ws.map(workingLabel)].join(' ').toLowerCase().includes(search.toLowerCase());});
- return <><section className="panel roster-intro"><div><small>ENTER THE CARRIAGE ROSTER</small><h2>Published sets and their daily variants</h2><p>Record the usual working once. Add Saturday, Sunday, alternate-week or date-specific variants where the route, finishing station, formation or next set changes.</p></div><div className="toolbar"><button className="primary" onClick={onNewSet}>Add roster set</button><button aria-label="Add Working" onClick={()=>onAdd()}>Add working to existing set</button></div><label>Search the roster<input aria-label="Search workings" type="search" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Set number, station or historical period…"/></label></section>{!groups.length&&<section className="panel empty">No matching sets. Add a published roster set to begin; physical carriage identities can be established later.</section>}{groups.map((d:Row)=>{const ws=workings.filter(w=>w.diagramId===d.id);return <section className="panel" key={d.id}><div className="section-head"><div><small>{d.period.name}</small><h2>Published Set {d.number}</h2></div><button onClick={()=>onAdd(d.id)}>Add day-specific variant</button></div><p>{d.description}</p><div className="roster-week">{days.map((day,n)=><div key={day}><strong>{day.slice(0,3)}</strong>{ws.filter(w=>w.calendar?.weekdays.includes(n)).map(w=><button key={w.id} onClick={()=>onOpen(w.id)}>{w.label||'Working'}<small>{w.startStation?.name||'?'} → {w.finishStation?.name||'?'}</small>{w.calendar.cycleWeeks>1&&<small>Week {w.calendar.weekOffsets.map((x:number)=>x+1).join(',')} of {w.calendar.cycleWeeks}</small>}</button>)}</div>)}</div><div className="table-wrap"><table><thead><tr><th>Working / days</th><th>Route and endpoints</th><th>Formation</th><th>Next published working</th><th>Source</th></tr></thead><tbody>{ws.map(w=><tr key={w.id}><td><button className="link" onClick={()=>onOpen(w.id)}>Diagram {d.number} · {w.label||dayLabel(w.calendar?.weekdays||[])}</button><p>{dayLabel(w.calendar?.weekdays||[])}</p></td><td>{w.startStation?.name||'Unknown'} → {w.finishStation?.name||'Unknown'}<p>{w.routeText||w.routeCalls.map((c:Row)=>c.station.name).join(' → ')}</p></td><td>{w.formation?.name||'Unknown'}{w.instructions.map((i:Row)=><p key={i.id}>{i.text}</p>)}</td><td>{w.nextRules.length?w.nextRules.map((r:Row)=><p key={r.id}>{days[r.weekday].slice(0,3)} → {r.targetWorking?.diagram.number||r.enteredNumber||(r.kind==='STABLED'?'Stabled':r.kind==='END'?'End recorded':'Unknown')}{r.kind==='STABLED'&&' (after stabling)'}</p>):'Next working not yet entered'}</td><td>{w.sources.map((s:Row)=><p key={s.id}>{s.title}{s.page?' · p. '+s.page:''}</p>)}</td></tr>)}</tbody></table></div><RecordActions kind="diagrams" row={d} catalog={catalog} onChanged={reload}/></section>;})}</>;
+export function RosterIndex({
+  catalog,
+  workings,
+  onAdd,
+  onNewSet,
+  onOpen,
+  reload,
+}: {
+  catalog: Row;
+  workings: Row[];
+  onAdd: (diagramId?: string) => void;
+  onNewSet: () => void;
+  onOpen: (id: string) => void;
+  reload: () => Promise<void>;
+}) {
+  const [search, setSearch] = useState("");
+  const groups = catalog.diagrams.filter((d: Row) => {
+    const ws = workings.filter((w) => w.diagramId === d.id);
+    return [d.number, d.description, d.period.name, ...ws.map(workingLabel)]
+      .join(" ")
+      .toLowerCase()
+      .includes(search.toLowerCase());
+  });
+  return (
+    <>
+      <section className="panel roster-intro">
+        <div>
+          <small>ENTER THE CARRIAGE ROSTER</small>
+          <h2>Published sets and their daily variants</h2>
+          <p>
+            Record the usual working once. Add Saturday, Sunday, alternate-week
+            or date-specific variants where the route, finishing station,
+            formation or next set changes.
+          </p>
+        </div>
+        <div className="toolbar">
+          <button className="primary" onClick={onNewSet}>
+            Add roster set
+          </button>
+          <button aria-label="Add Working" onClick={() => onAdd()}>
+            Add working to existing set
+          </button>
+        </div>
+        <label>
+          Search the roster
+          <input
+            aria-label="Search workings"
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Set number, station or historical period…"
+          />
+        </label>
+      </section>
+      {!groups.length && (
+        <section className="panel empty">
+          No matching sets. Add a published roster set to begin; physical
+          carriage identities can be established later.
+        </section>
+      )}
+      {groups.map((d: Row) => {
+        const ws = workings.filter((w) => w.diagramId === d.id);
+        return (
+          <section className="panel" key={d.id}>
+            <div className="section-head">
+              <div>
+                <small>{d.period.name}</small>
+                <h2>Published Set {d.number}</h2>
+              </div>
+              <button onClick={() => onAdd(d.id)}>
+                Add day-specific variant
+              </button>
+            </div>
+            <p>{d.description}</p>
+            <div className="roster-week">
+              {days.map((day, n) => (
+                <div key={day}>
+                  <strong>{day.slice(0, 3)}</strong>
+                  {ws
+                    .filter((w) => w.calendar?.weekdays.includes(n))
+                    .map((w) => (
+                      <button key={w.id} onClick={() => onOpen(w.id)}>
+                        {w.label || "Working"}
+                        <small>
+                          {w.startStation?.name || "?"} →{" "}
+                          {w.finishStation?.name || "?"}
+                        </small>
+                        {w.calendar.cycleWeeks > 1 && (
+                          <small>
+                            Week{" "}
+                            {w.calendar.weekOffsets
+                              .map((x: number) => x + 1)
+                              .join(",")}{" "}
+                            of {w.calendar.cycleWeeks}
+                          </small>
+                        )}
+                      </button>
+                    ))}
+                </div>
+              ))}
+            </div>
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Working / days</th>
+                    <th>Route and endpoints</th>
+                    <th>Formation</th>
+                    <th>Next published working</th>
+                    <th>Source</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ws.map((w) => (
+                    <tr key={w.id}>
+                      <td>
+                        <button className="link" onClick={() => onOpen(w.id)}>
+                          Diagram {d.number} ·{" "}
+                          {w.label || dayLabel(w.calendar?.weekdays || [])}
+                        </button>
+                        <p>{dayLabel(w.calendar?.weekdays || [])}</p>
+                      </td>
+                      <td>
+                        {w.startStation?.name || "Unknown"} →{" "}
+                        {w.finishStation?.name || "Unknown"}
+                        <p>
+                          {w.routeText ||
+                            w.routeCalls
+                              .map((c: Row) => c.station.name)
+                              .join(" → ")}
+                        </p>
+                      </td>
+                      <td>
+                        {w.formation?.name || "Unknown"}
+                        {w.instructions.map((i: Row) => (
+                          <p key={i.id}>{i.text}</p>
+                        ))}
+                      </td>
+                      <td>
+                        {w.nextRules.length
+                          ? w.nextRules.map((r: Row) => (
+                              <p key={r.id}>
+                                {days[r.weekday].slice(0, 3)} →{" "}
+                                {r.targetWorking?.diagram.number ||
+                                  r.enteredNumber ||
+                                  (r.kind === "STABLED"
+                                    ? "Stabled"
+                                    : r.kind === "END"
+                                      ? "End recorded"
+                                      : "Unknown")}
+                                {r.kind === "STABLED" && " (after stabling)"}
+                              </p>
+                            ))
+                          : "Next working not yet entered"}
+                      </td>
+                      <td>
+                        {w.sources.map((s: Row) => (
+                          <p key={s.id}>
+                            {s.title}
+                            {s.page ? " · p. " + s.page : ""}
+                          </p>
+                        ))}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <RecordActions
+              kind="diagrams"
+              row={d}
+              catalog={catalog}
+              onChanged={reload}
+            />
+          </section>
+        );
+      })}
+    </>
+  );
 }

@@ -1,12 +1,256 @@
-import {FastifyInstance} from 'fastify';import {PrismaClient} from '@prisma/client';import {z} from 'zod';import {uuid,text,httpError} from './validation.js';import {audit} from './data.js';import {runAnalysis,analysisView,loadOccurrence} from './analysis-service.js';import {approvePair,guardLockedLink} from './research-guards.js';
-export const analysisInput=z.object({periodId:uuid,start:z.iso.date(),weeks:z.number().int().min(2).max(26).default(8)});
-export function registerAnalysis(app:FastifyInstance,db:PrismaClient){
- app.post('/api/analysis',async(req,reply)=>reply.code(201).send(await runAnalysis(db,analysisInput.parse(req.body))));
- app.get('/api/analysis',()=>db.analysisRun.findMany({orderBy:{updatedAt:'desc'}}));
- app.get('/api/analysis/:id',req=>analysisView(db,uuid.parse((req.params as any).id)));
- app.post('/api/proposals/:id/review',async req=>{const data=z.object({decision:z.enum(['Approved','Rejected','Pending']),reason:text.min(1),acknowledge:z.boolean().default(false)}).parse(req.body),id=uuid.parse((req.params as any).id);return db.$transaction(async tx=>{const p=await tx.connectionProposal.findUniqueOrThrow({where:{id}});if(data.decision==='Approved')return approvePair(tx,p.fromId,p.toId,data.reason,data.acknowledge);const existing=await tx.approvedConnection.findUnique({where:{fromId_toId:{fromId:p.fromId,toId:p.toId}}});if(existing?.active){await guardLockedLink(tx,p.fromId);await tx.approvedConnection.update({where:{id:existing.id},data:{active:false,fromKey:null,targetExclusiveKey:null}});}const before=await tx.connectionReview.findUnique({where:{fromId_toId:{fromId:p.fromId,toId:p.toId}}});const after=await tx.connectionReview.upsert({where:{fromId_toId:{fromId:p.fromId,toId:p.toId}},create:{fromId:p.fromId,toId:p.toId,decision:data.decision,reason:data.reason},update:{decision:data.decision,reason:data.reason}});await audit(tx,p.fromId,'Connection review',data.decision,data.reason,before,after);return after;});});
- app.get('/api/issues',async req=>{const q=z.object({severity:z.enum(['Error','Warning','Unresolved','Verified']).optional(),stationId:uuid.optional(),diagramId:uuid.optional(),physicalSetId:uuid.optional(),reviewState:z.enum(['Open','Investigated','Resolved','Dismissed']).optional(),includeInactive:z.enum(['true','false']).optional()}).parse(req.query);const issues=await db.planningIssue.findMany({where:{...(q.severity?{severity:q.severity}:{}),...(q.reviewState?{reviewState:q.reviewState}:{}),...(q.physicalSetId?{physicalSetId:q.physicalSetId}:{}),...(q.includeInactive==='true'?{}:{active:true})},orderBy:{lastSeen:'desc'}});const rows=await Promise.all(issues.map(async i=>({...i,from:i.fromId?await loadOccurrence(db,i.fromId):null,to:i.toId?await loadOccurrence(db,i.toId):null})));return rows.filter(i=>(!q.stationId||[i.from?.working.startStationId,i.from?.working.finishStationId,i.to?.working.startStationId,i.to?.working.finishStationId].includes(q.stationId))&&(!q.diagramId||i.from?.working.diagramId===q.diagramId||i.to?.working.diagramId===q.diagramId));});
- app.post('/api/issues/:id/review',async req=>{const id=uuid.parse((req.params as any).id),data=z.object({state:z.enum(['Open','Investigated','Resolved','Dismissed']),note:text.min(1)}).parse(req.body);return db.$transaction(async tx=>{const before=await tx.planningIssue.findUniqueOrThrow({where:{id}});await tx.issueReview.create({data:{...data,issueId:id}});const after=await tx.planningIssue.update({where:{id},data:{reviewState:data.state}});await audit(tx,id,'Issue review',data.state,data.note,before,after);return after;});});
- app.get('/api/issues/:id/history',req=>db.issueReview.findMany({where:{issueId:uuid.parse((req.params as any).id)},orderBy:{createdAt:'desc'}}));
- app.post('/api/transfers',async(req,reply)=>{const data=z.object({fromId:uuid,toId:uuid,sequence:z.number().int().positive().max(100),startStationId:uuid.nullable(),finishStationId:uuid.nullable(),startDate:z.iso.date(),finishDate:z.iso.date(),startMinutes:z.number().int().min(0).max(1439).nullable(),finishMinutes:z.number().int().min(0).max(1439).nullable(),sourceTitle:text.default(''),sourcePage:text.default(''),notes:text.min(1)}).parse(req.body);return reply.code(201).send(await db.$transaction(async tx=>{const row=await tx.connectingMovement.create({data:{...data,startDate:new Date(data.startDate),finishDate:new Date(data.finishDate)}});await audit(tx,data.fromId,'Connecting movement','Recorded manually',data.notes,null,row);return row;}));});
+import { FastifyInstance } from "fastify";
+import { PrismaClient } from "@prisma/client";
+import { z } from "zod";
+import { onCalendar } from "./calendar.js";
+import { workingInclude } from "./data.js";
+import { uuid, text, httpError } from "./validation.js";
+import { audit } from "./data.js";
+import {
+  runAnalysis,
+  analysisView,
+  loadOccurrence,
+} from "./analysis-service.js";
+import { approvePair, guardLockedLink } from "./research-guards.js";
+export const analysisInput = z.object({
+  periodId: uuid,
+  start: z.iso.date(),
+  weeks: z.number().int().min(2).max(26).default(8),
+});
+export function registerAnalysis(app: FastifyInstance, db: PrismaClient) {
+  app.post("/api/analysis", async (req, reply) =>
+    reply.code(201).send(await runAnalysis(db, analysisInput.parse(req.body))),
+  );
+  app.get("/api/analysis", () =>
+    db.analysisRun.findMany({ orderBy: { updatedAt: "desc" } }),
+  );
+  app.get("/api/analysis/:id", (req) =>
+    analysisView(db, uuid.parse((req.params as any).id)),
+  );
+  app.post("/api/proposals/:id/review", async (req) => {
+    const data = z
+        .object({
+          decision: z.enum(["Approved", "Rejected", "Pending"]),
+          reason: text.min(1),
+          acknowledge: z.boolean().default(false),
+        })
+        .parse(req.body),
+      id = uuid.parse((req.params as any).id);
+    return db.$transaction(async (tx) => {
+      const p = await tx.connectionProposal.findUniqueOrThrow({
+        where: { id },
+      });
+      if (data.decision === "Approved")
+        return approvePair(tx, p.fromId, p.toId, data.reason, data.acknowledge);
+      const existing = await tx.approvedConnection.findUnique({
+        where: { fromId_toId: { fromId: p.fromId, toId: p.toId } },
+      });
+      if (existing?.active) {
+        await guardLockedLink(tx, p.fromId);
+        await tx.approvedConnection.update({
+          where: { id: existing.id },
+          data: { active: false, fromKey: null, targetExclusiveKey: null },
+        });
+      }
+      const before = await tx.connectionReview.findUnique({
+        where: { fromId_toId: { fromId: p.fromId, toId: p.toId } },
+      });
+      const after = await tx.connectionReview.upsert({
+        where: { fromId_toId: { fromId: p.fromId, toId: p.toId } },
+        create: {
+          fromId: p.fromId,
+          toId: p.toId,
+          decision: data.decision,
+          reason: data.reason,
+        },
+        update: { decision: data.decision, reason: data.reason },
+      });
+      await audit(
+        tx,
+        p.fromId,
+        "Connection review",
+        data.decision,
+        data.reason,
+        before,
+        after,
+      );
+      return after;
+    });
+  });
+  app.get("/api/issues", async (req) => {
+    const q = z
+      .object({
+        severity: z
+          .enum(["Error", "Warning", "Unresolved", "Verified"])
+          .optional(),
+        stationId: uuid.optional(),
+        diagramId: uuid.optional(),
+        physicalSetId: uuid.optional(),
+        reviewState: z
+          .enum(["Open", "Investigated", "Resolved", "Dismissed"])
+          .optional(),
+        includeInactive: z.enum(["true", "false"]).optional(),
+      })
+      .parse(req.query);
+    const issues = await db.planningIssue.findMany({
+      where: {
+        ...(q.severity ? { severity: q.severity } : {}),
+        ...(q.reviewState ? { reviewState: q.reviewState } : {}),
+        ...(q.physicalSetId ? { physicalSetId: q.physicalSetId } : {}),
+        ...(q.includeInactive === "true" ? {} : { active: true }),
+      },
+      orderBy: { lastSeen: "desc" },
+    });
+    const rows = await Promise.all(
+      issues.map(async (i) => ({
+        ...i,
+        from: i.fromId ? await loadOccurrence(db, i.fromId) : null,
+        to: i.toId ? await loadOccurrence(db, i.toId) : null,
+      })),
+    );
+    return rows.filter(
+      (i) =>
+        (!q.stationId ||
+          [
+            i.from?.working.startStationId,
+            i.from?.working.finishStationId,
+            i.to?.working.startStationId,
+            i.to?.working.finishStationId,
+          ].includes(q.stationId)) &&
+        (!q.diagramId ||
+          i.from?.working.diagramId === q.diagramId ||
+          i.to?.working.diagramId === q.diagramId),
+    );
+  });
+  app.post("/api/issues/:id/review", async (req) => {
+    const id = uuid.parse((req.params as any).id),
+      data = z
+        .object({
+          state: z.enum(["Open", "Investigated", "Resolved", "Dismissed"]),
+          note: text.min(1),
+        })
+        .parse(req.body);
+    return db.$transaction(async (tx) => {
+      const before = await tx.planningIssue.findUniqueOrThrow({
+        where: { id },
+      });
+      await tx.issueReview.create({ data: { ...data, issueId: id } });
+      const after = await tx.planningIssue.update({
+        where: { id },
+        data: { reviewState: data.state },
+      });
+      await audit(tx, id, "Issue review", data.state, data.note, before, after);
+      return after;
+    });
+  });
+  app.get("/api/issues/:id/history", (req) =>
+    db.issueReview.findMany({
+      where: { issueId: uuid.parse((req.params as any).id) },
+      orderBy: { createdAt: "desc" },
+    }),
+  );
+  app.post("/api/connections/manual", async (req) => {
+    const data = z
+      .object({
+        fromWorkingId: uuid,
+        toWorkingId: uuid,
+        fromDate: z.iso.date(),
+        toDate: z.iso.date(),
+        reason: text.min(1),
+        acknowledge: z.boolean().default(false),
+      })
+      .parse(req.body);
+    return db.$transaction(async (tx) => {
+      const ids = [];
+      for (const [workingId, dateText] of [
+        [data.fromWorkingId, data.fromDate],
+        [data.toWorkingId, data.toDate],
+      ]) {
+        const w = await tx.workingDefinition.findUniqueOrThrow({
+            where: { id: workingId },
+            include: workingInclude,
+          }),
+          date = new Date(dateText);
+        if (
+          w.archived ||
+          w.diagram.archived ||
+          !onCalendar(w.calendar, date, w.diagram.period)
+        )
+          throw httpError(
+            400,
+            "A selected working does not operate on its entered date.",
+          );
+        const o = await tx.workingOccurrence.upsert({
+          where: { workingId_date: { workingId, date } },
+          create: { workingId, date },
+          update: {},
+        });
+        ids.push(o.id);
+      }
+      return approvePair(tx, ids[0], ids[1], data.reason, data.acknowledge);
+    });
+  });
+  app.post("/api/transfers/:id/archive", async (req) => {
+    const id = uuid.parse((req.params as any).id),
+      { reason } = z.object({ reason: text.min(1) }).parse(req.body);
+    return db.$transaction(async (tx) => {
+      const before = await tx.connectingMovement.findUniqueOrThrow({
+        where: { id },
+      });
+      await guardLockedLink(tx, before.fromId);
+      const after = await tx.connectingMovement.update({
+        where: { id },
+        data: { archived: true },
+      });
+      await audit(
+        tx,
+        before.fromId,
+        "Connecting movement",
+        "Archived",
+        reason,
+        before,
+        after,
+      );
+      return after;
+    });
+  });
+  app.post("/api/transfers", async (req, reply) => {
+    const data = z
+      .object({
+        fromId: uuid,
+        toId: uuid,
+        sequence: z.number().int().positive().max(100),
+        startStationId: uuid.nullable(),
+        finishStationId: uuid.nullable(),
+        startDate: z.iso.date(),
+        finishDate: z.iso.date(),
+        startMinutes: z.number().int().min(0).max(1439).nullable(),
+        finishMinutes: z.number().int().min(0).max(1439).nullable(),
+        sourceTitle: text.default(""),
+        sourcePage: text.default(""),
+        notes: text.min(1),
+      })
+      .parse(req.body);
+    return reply.code(201).send(
+      await db.$transaction(async (tx) => {
+        await guardLockedLink(tx, data.fromId);
+        const row = await tx.connectingMovement.create({
+          data: {
+            ...data,
+            startDate: new Date(data.startDate),
+            finishDate: new Date(data.finishDate),
+          },
+        });
+        await audit(
+          tx,
+          data.fromId,
+          "Connecting movement",
+          "Recorded manually",
+          data.notes,
+          null,
+          row,
+        );
+        return row;
+      }),
+    );
+  });
 }

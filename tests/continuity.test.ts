@@ -1,5 +1,143 @@
-import {test} from 'node:test';import assert from 'node:assert/strict';import {assess} from '../server/continuity.js';import {setup} from './helpers.js';
-const station=(id:string)=>({id,name:id});
-function occurrence(id:string,date:string,start:string,finish:string,count=4){return {id,workingId:id,date:new Date(date),assignments:[],working:{id,label:id,diagram:{number:id,periodId:'period',period:{name:'test'}},calendar:{weekdays:[0,1,2,3,4,5,6],exceptions:[]},startStationId:start,finishStationId:finish,startStation:station(start),finishStation:station(finish),startMinutes:600,finishMinutes:1080,startDayOffset:0,finishDayOffset:0,formation:{completeness:'Known',members:[{typeId:'third',quantity:count}]},changes:[],variations:[],exclusive:true}};}
-test('Continuity: locations, formations, missing evidence and overnight dates',()=>{const a=occurrence('A','1939-01-02','Leeds','Scarborough'),b=occurrence('B','1939-01-03','York','Hull');assert.equal(assess(a,b).checks.find(c=>c.code==='DESTINATION_MISMATCH')?.state,'Error');b.working.startStationId='Scarborough';b.working.startStation=station('Scarborough');assert.equal(assess(a,b).classification,'Strong candidate');b.working.startMinutes=null as any;assert.equal(assess(a,b).checks.find(c=>c.code==='UNKNOWN_TIME')?.state,'Unresolved');b.working.startMinutes=600;b.working.formation.members[0].quantity=6;assert.equal(assess(a,b).checks.find(c=>c.code==='FORMATION_MISMATCH')?.state,'Warning');b.working.changes=[{stage:'Start',action:'Attach',quantity:2,typeId:'third',weekdays:[]}] as any;assert.equal(assess(a,b).checks.find(c=>c.code==='FORMATION')?.state,'Pass');a.date=new Date('1939-01-08');a.working.finishMinutes=30;a.working.finishDayOffset=1;b.date=new Date('1939-01-09');b.working.startMinutes=60;assert.equal(assess(a,b).hasErrors,false);b.working.startMinutes=15;assert.equal(assess(a,b).checks.find(c=>c.code==='IMPOSSIBLE_TIME')?.state,'Error');});
-test('Analysis is repeatable; missing continuations and review history persist',async()=>{const {app,db}=await setup();try{const p=await db.historicalPeriod.create({data:{name:'Synthetic continuity'}});const s=await db.station.create({data:{name:'Scarborough'}});const d=await db.publishedDiagram.create({data:{number:'A',periodId:p.id}});const w=await db.workingDefinition.create({data:{diagramId:d.id,label:'Synthetic A',startStationId:s.id,finishStationId:s.id,calendar:{create:{weekdays:[0]}}}});const run=()=>app.inject({method:'POST',url:'/api/analysis',payload:{periodId:p.id,start:'1939-01-02',weeks:2}});let r=await run();assert.equal(r.statusCode,201,r.body);assert.equal(r.json().occurrences,2);const issue=await db.planningIssue.findFirstOrThrow({where:{code:'MISSING_NEXT'}});const reviewed=await app.inject({method:'POST',url:`/api/issues/${issue.id}/review`,payload:{state:'Dismissed',note:'Still unknown; retain original finding'}});assert.equal(reviewed.statusCode,200,reviewed.body);const count=await db.planningIssue.count();r=await run();assert.equal(await db.planningIssue.count(),count);const preserved=await db.planningIssue.findUniqueOrThrow({where:{id:issue.id}});assert.equal(preserved.active,true);assert.equal(preserved.reviewState,'Dismissed');assert.ok(preserved.originalFinding);assert.equal(await db.issueReview.count(),1);const view=await app.inject({url:'/api/issues?diagramId='+d.id});assert.equal(view.statusCode,200,view.body);assert.equal(view.json().length,2);}finally{await app.close();}});
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { assess } from "../server/continuity.js";
+import { setup } from "./helpers.js";
+const station = (id: string) => ({ id, name: id });
+function occurrence(
+  id: string,
+  date: string,
+  start: string,
+  finish: string,
+  count = 4,
+) {
+  return {
+    id,
+    workingId: id,
+    date: new Date(date),
+    assignments: [],
+    working: {
+      id,
+      label: id,
+      diagram: { number: id, periodId: "period", period: { name: "test" } },
+      calendar: { weekdays: [0, 1, 2, 3, 4, 5, 6], exceptions: [] },
+      startStationId: start,
+      finishStationId: finish,
+      startStation: station(start),
+      finishStation: station(finish),
+      startMinutes: 600,
+      finishMinutes: 1080,
+      startDayOffset: 0,
+      finishDayOffset: 0,
+      formation: {
+        completeness: "Known",
+        members: [{ typeId: "third", quantity: count }],
+      },
+      changes: [],
+      variations: [],
+      exclusive: true,
+    },
+  };
+}
+test("Continuity: locations, formations, missing evidence and overnight dates", () => {
+  const a = occurrence("A", "1939-01-02", "Leeds", "Scarborough"),
+    b = occurrence("B", "1939-01-03", "York", "Hull");
+  assert.equal(
+    assess(a, b).checks.find((c) => c.code === "DESTINATION_MISMATCH")?.state,
+    "Error",
+  );
+  b.working.startStationId = "Scarborough";
+  b.working.startStation = station("Scarborough");
+  assert.equal(assess(a, b).classification, "Strong candidate");
+  b.working.startMinutes = null as any;
+  assert.equal(
+    assess(a, b).checks.find((c) => c.code === "UNKNOWN_TIME")?.state,
+    "Unresolved",
+  );
+  b.working.startMinutes = 600;
+  b.working.formation.members[0].quantity = 6;
+  assert.equal(
+    assess(a, b).checks.find((c) => c.code === "FORMATION_MISMATCH")?.state,
+    "Warning",
+  );
+  b.working.changes = [
+    {
+      stage: "Start",
+      action: "Attach",
+      quantity: 2,
+      typeId: "third",
+      weekdays: [],
+    },
+  ] as any;
+  assert.equal(
+    assess(a, b).checks.find((c) => c.code === "FORMATION")?.state,
+    "Pass",
+  );
+  a.date = new Date("1939-01-08");
+  a.working.finishMinutes = 30;
+  a.working.finishDayOffset = 1;
+  b.date = new Date("1939-01-09");
+  b.working.startMinutes = 60;
+  assert.equal(assess(a, b).hasErrors, false);
+  b.working.startMinutes = 15;
+  assert.equal(
+    assess(a, b).checks.find((c) => c.code === "IMPOSSIBLE_TIME")?.state,
+    "Error",
+  );
+});
+test("Analysis is repeatable; missing continuations and review history persist", async () => {
+  const { app, db } = await setup();
+  try {
+    const p = await db.historicalPeriod.create({
+      data: { name: "Synthetic continuity" },
+    });
+    const s = await db.station.create({ data: { name: "Scarborough" } });
+    const d = await db.publishedDiagram.create({
+      data: { number: "A", periodId: p.id },
+    });
+    const w = await db.workingDefinition.create({
+      data: {
+        diagramId: d.id,
+        label: "Synthetic A",
+        startStationId: s.id,
+        finishStationId: s.id,
+        calendar: { create: { weekdays: [0] } },
+      },
+    });
+    const run = () =>
+      app.inject({
+        method: "POST",
+        url: "/api/analysis",
+        payload: { periodId: p.id, start: "1939-01-02", weeks: 2 },
+      });
+    let r = await run();
+    assert.equal(r.statusCode, 201, r.body);
+    assert.equal(r.json().occurrences, 2);
+    const issue = await db.planningIssue.findFirstOrThrow({
+      where: { code: "MISSING_NEXT" },
+    });
+    const reviewed = await app.inject({
+      method: "POST",
+      url: `/api/issues/${issue.id}/review`,
+      payload: {
+        state: "Dismissed",
+        note: "Still unknown; retain original finding",
+      },
+    });
+    assert.equal(reviewed.statusCode, 200, reviewed.body);
+    const count = await db.planningIssue.count();
+    r = await run();
+    assert.equal(await db.planningIssue.count(), count);
+    const preserved = await db.planningIssue.findUniqueOrThrow({
+      where: { id: issue.id },
+    });
+    assert.equal(preserved.active, true);
+    assert.equal(preserved.reviewState, "Dismissed");
+    assert.ok(preserved.originalFinding);
+    assert.equal(await db.issueReview.count(), 1);
+    const view = await app.inject({ url: "/api/issues?diagramId=" + d.id });
+    assert.equal(view.statusCode, 200, view.body);
+    assert.equal(view.json().length, 2);
+  } finally {
+    await app.close();
+  }
+});

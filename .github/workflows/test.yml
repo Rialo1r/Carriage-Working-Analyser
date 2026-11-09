@@ -1,4 +1,4 @@
-name: Planner Phase 1 checks
+name: Planner roster and rotation checks
 on:
   push:
   pull_request:

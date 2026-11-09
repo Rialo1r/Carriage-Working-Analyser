@@ -17,7 +17,7 @@ services:
     image: lner-rotation-planner:phase1
     build: .
     ports:
-      - "127.0.0.1:${PLANNER_PORT:-4310}:4310"
+      - "${PLANNER_BIND:-127.0.0.1}:${PLANNER_PORT:-4310}:4310"
     environment:
       DATABASE_URL: postgresql://planner:planner_local_only@db:5432/planner
       PORT: 4310

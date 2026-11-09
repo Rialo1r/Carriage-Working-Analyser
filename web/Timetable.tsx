@@ -64,7 +64,7 @@ export function Timetable({ onOpen }: { onOpen: (id: string) => void }) {
           {o.formation?.name || "Unknown formation"} ·{" "}
           {o.formationCount.description}
         </small>
-        <p className="unverified">Unverified</p>
+        <p className="unverified">{o.connectionStatus}</p>
         {!o.onCalendar && (
           <p className="warning">
             Outside current calendar — manual assignment retained.
@@ -81,13 +81,14 @@ export function Timetable({ onOpen }: { onOpen: (id: string) => void }) {
       <section className="panel">
         <div className="section-head">
           <div>
-            <h2>Basic weekly timetable</h2>
+            <h2>Master rotation board</h2>
             <p>
-              Generated from entered calendars and manual assignments. These are
-              separate dated occurrences, not automatically generated rotations.
+              Generated from entered calendars and approved or manual
+              physical-set assignments. Each date is a separate working
+              occurrence.
             </p>
           </div>
-          <span className="badge">Phase 1 · all connections unverified</span>
+          <span className="badge">Live roster · research statuses</span>
         </div>
         <div className="toolbar">
           <label>
@@ -107,7 +108,7 @@ export function Timetable({ onOpen }: { onOpen: (id: string) => void }) {
               value={weeks}
               onChange={(e) => setWeeks(Number(e.target.value))}
             >
-              {[1, 2, 3, 4].map((n) => (
+              {[1, 2, 3, 4, 8, 12, 26].map((n) => (
                 <option key={n} value={n}>
                   {n}
                 </option>
@@ -169,6 +170,28 @@ export function Timetable({ onOpen }: { onOpen: (id: string) => void }) {
                                 ),
                             )
                             .map(cell)}
+                          {!data.occurrences.some(
+                            (o: Row) =>
+                              o.date.slice(0, 10) === date &&
+                              o.assignments.some(
+                                (a: Row) => a.physicalSetId === s.id,
+                              ),
+                          ) &&
+                            data.storage
+                              ?.filter(
+                                (g: Row) =>
+                                  g.physicalSetId === s.id &&
+                                  g.fromDate < date &&
+                                  g.toDate > date,
+                              )
+                              .slice(0, 1)
+                              .map((g: Row) => (
+                                <p key={date}>
+                                  Stabled
+                                  <br />
+                                  {g.stationName}
+                                </p>
+                              ))}
                         </td>
                       ))}
                     </tr>
@@ -199,7 +222,7 @@ export function Timetable({ onOpen }: { onOpen: (id: string) => void }) {
                     .filter((o: Row) => o.onCalendar)
                     .map((o: Row) => ({
                       id: o.id,
-                      label: `${o.date.slice(0, 10)} · Diagram ${o.working.diagram.number} · ${o.working.label || dayLabel(o.working.calendar?.weekdays||[])} · ${o.working.startStation?.name || "?"} → ${o.working.finishStation?.name || "?"}`,
+                      label: `${o.date.slice(0, 10)} · Diagram ${o.working.diagram.number} · ${o.working.label || dayLabel(o.working.calendar?.weekdays || [])} · ${o.working.startStation?.name || "?"} → ${o.working.finishStation?.name || "?"}`,
                     }))}
                   required
                 />
@@ -223,8 +246,8 @@ export function Timetable({ onOpen }: { onOpen: (id: string) => void }) {
             <section className="panel">
               <h2>Entered next-working references</h2>
               <p>
-                Location, timing and formation continuity have not been checked.
-                Automatic checks begin in Phase 2.
+                Use Stock Chains to check current locations, times and
+                formations. These are your entered next-working instructions.
               </p>
               {data.occurrences.map((o: Row) => (
                 <article key={o.id}>
@@ -256,7 +279,6 @@ export function Timetable({ onOpen }: { onOpen: (id: string) => void }) {
                     {o.date.slice(0, 10)} · Diagram {o.working.diagram.number} ·{" "}
                     {o.working.label}
                   </button>
-                  
                 </div>
                 <p>
                   {o.assignments.length

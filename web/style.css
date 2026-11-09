@@ -680,4 +680,65 @@ dialog::backdrop {
     min-width: 0;
   }
 }
-.roster-week{display:grid;grid-template-columns:repeat(7,minmax(100px,1fr));gap:5px;overflow:auto;margin:20px 0}.roster-week>div{background:#eef1e5;padding:10px}.roster-week strong{font-size:12px}.roster-week button{display:block;width:100%;margin:8px 0;text-align:left;padding:8px;font-size:12px}.roster-week small{display:block;margin-top:4px}.record-actions{display:flex;gap:6px;flex-wrap:wrap}
+.roster-week {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(100px, 1fr));
+  gap: 5px;
+  overflow: auto;
+  margin: 20px 0;
+}
+.roster-week > div {
+  background: #eef1e5;
+  padding: 10px;
+}
+.roster-week strong {
+  font-size: 12px;
+}
+.roster-week button {
+  display: block;
+  width: 100%;
+  margin: 8px 0;
+  text-align: left;
+  padding: 8px;
+  font-size: 12px;
+}
+.roster-week small {
+  display: block;
+  margin-top: 4px;
+}
+.record-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.rotation-chain {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  max-width: 680px;
+  gap: 0.5rem;
+  margin: 1rem 0;
+}
+.chain-node {
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+  border-left: 4px solid #327568;
+  padding: 1rem;
+  gap: 0.35rem;
+}
+.chain-link {
+  padding: 0.25rem 1rem;
+  color: #49665c;
+}
+.notice {
+  padding: 0.6rem;
+  background: #fff4d6;
+}
+.table-scroll {
+  overflow: auto;
+}
+td button {
+  white-space: normal;
+  min-width: 105px;
+}

@@ -281,8 +281,19 @@ export function CatalogDialog({
   );
 }
 
-export function readableResearch(value:any):any{
- if(Array.isArray(value))return value.map(readableResearch);
- if(value&&typeof value==='object')return Object.fromEntries(Object.entries(value).filter(([k,v])=>k!=='id'&&!k.endsWith('Id')&&k!=='exclusiveKey'&&!(typeof v==='string'&&/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(v))).map(([k,v])=>[k,readableResearch(v)]));
- return value;
+export function readableResearch(value: any): any {
+  if (Array.isArray(value)) return value.map(readableResearch);
+  if (value && typeof value === "object")
+    return Object.fromEntries(
+      Object.entries(value)
+        .filter(
+          ([k, v]) =>
+            k !== "id" &&
+            !k.endsWith("Id") &&
+            k !== "exclusiveKey" &&
+            !(typeof v === "string" && /^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(v)),
+        )
+        .map(([k, v]) => [k, readableResearch(v)]),
+    );
+  return value;
 }

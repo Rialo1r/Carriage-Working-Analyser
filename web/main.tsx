@@ -1,14 +1,21 @@
-import {IssueDesk,ChainDesk} from "./Research";
+import { IssueDesk, ChainDesk } from "./Research";
 import React, { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { api, Row, workingLabel, dayLabel, timeLabel, readableResearch } from "./common";
+import {
+  api,
+  Row,
+  workingLabel,
+  dayLabel,
+  timeLabel,
+  readableResearch,
+} from "./common";
 import {
   DiagramPage,
   PhysicalSets,
   Registers,
   Formations,
 } from "./CatalogPages";
-import { RosterIndex,AddRosterSet } from "./Roster";
+import { RosterIndex, AddRosterSet } from "./Roster";
 import { WorkingEditor, WorkingDetail } from "./Workings";
 import { Timetable } from "./Timetable";
 import "./style.css";
@@ -81,25 +88,28 @@ function App() {
     "Weekly Timetable": "Weekly working timetable",
     Registers: "Stations & carriage types",
     History: "Research history",
-    "Stock Chains":"Physical carriage chains", Issues:"Issues & conflicts",
+    "Stock Chains": "Physical carriage chains",
+    Issues: "Issues & conflicts",
   };
   const nav = [
-    "Stock Chains", "Issues",
     "Dashboard",
     "Workings",
     "Published Diagrams",
     "Physical Sets",
     "Formations",
+    "Stock Chains",
+    "Issues",
     "Weekly Timetable",
     "Registers",
     "History",
   ];
-  const [addSet,setAddSet]=useState(false),[draft,setDraft]=useState<Row|null>(null);
-  function addWorking(diagramId?:string) {
+  const [addSet, setAddSet] = useState(false),
+    [draft, setDraft] = useState<Row | null>(null);
+  function addWorking(diagramId?: string) {
     navigation.current++;
     selectedId.current = null;
     setSelected(null);
-    setDraft(diagramId?{diagramId}:null);
+    setDraft(diagramId ? { diagramId } : null);
     setCopy(false);
     setCopyDays(undefined);
     setEditing(true);
@@ -122,7 +132,7 @@ function App() {
             <br />& Rotation Planner
           </strong>
         </a>
-        <p className="edition">PERSONAL RESEARCH · PHASE 1</p>
+        <p className="edition">PERSONAL RESEARCH · ROSTER & ROTATIONS</p>
         <nav aria-label="Main navigation">
           {nav.map((t) => (
             <button
@@ -135,19 +145,23 @@ function App() {
                   void api("/history")
                     .then(setHistory)
                     .catch((e) => setError(e.message));
-                if (t === "Dashboard")
+                if (t !== "History")
                   void refresh().catch((e) => setError(e.message));
               }}
             >
-              {t === "Registers" ? "Stations & Types" : t === "Workings" ? "Carriage Roster" : t}
+              {t === "Registers"
+                ? "Stations & Types"
+                : t === "Workings"
+                  ? "Carriage Roster"
+                  : t}
             </button>
           ))}
         </nav>
         <div className="phase-note">
-          <strong>Manual entry foundation</strong>
+          <strong>Evidence-led rotations</strong>
           <p>
-            Continuity checking and automatic rotations will follow after
-            approval.
+            Enter the roster, check connections, then approve physical carriage
+            chains.
           </p>
         </div>
       </aside>
@@ -174,11 +188,24 @@ function App() {
           </div>
         )}
         {!catalog && !error && <p>Loading your research database…</p>}
-        {catalog&&addSet&&<AddRosterSet catalog={catalog} onClose={()=>setAddSet(false)} onAdded={async d=>{await refresh();addWorking(d.id);}}/>}
+        {catalog && addSet && (
+          <AddRosterSet
+            catalog={catalog}
+            onClose={() => setAddSet(false)}
+            onAdded={async (d) => {
+              await refresh();
+              addWorking(d.id);
+            }}
+          />
+        )}
         {catalog && (
           <>
-            {tab === "Stock Chains" && <ChainDesk catalog={catalog} openWorking={openWorking}/>}
-            {tab === "Issues" && <IssueDesk catalog={catalog} openWorking={openWorking}/>}
+            {tab === "Stock Chains" && (
+              <ChainDesk catalog={catalog} openWorking={openWorking} />
+            )}
+            {tab === "Issues" && (
+              <IssueDesk catalog={catalog} openWorking={openWorking} />
+            )}
             {tab === "Dashboard" && (
               <>
                 <div className="welcome">
@@ -189,7 +216,7 @@ function App() {
                       next-working instructions. Leave physical identities and
                       uncertain details open until you have the evidence.
                     </p>
-                    <button className="primary" onClick={()=>addWorking()}>
+                    <button className="primary" onClick={() => addWorking()}>
                       Add Working
                     </button>
                     <button onClick={() => setTab("Published Diagrams")}>
@@ -231,8 +258,8 @@ function App() {
                         wording.
                       </li>
                       <li>
-                        Create a physical set when ready, then assign dated
-                        workings manually.
+                        Check connections and generate proposed chains from
+                        Stock Chains. Approve them when ready.
                       </li>
                     </ol>
                   </section>
@@ -244,9 +271,9 @@ function App() {
                       occurrences.
                     </p>
                     <p>
-                      Phase 1 does not infer connections, verify rotations,
-                      process PDFs or run OCR. No historical examples have been
-                      preloaded.
+                      Suggestions remain unconfirmed until you approve them.
+                      Locked rotation snapshots preserve your research. All
+                      historical entry is manual.
                     </p>
                   </section>
                 </div>
@@ -293,7 +320,7 @@ function App() {
                     (copyDays?.join(",") || "")
                   }
                   catalog={catalog}
-                  working={selected||draft}
+                  working={selected || draft}
                   copy={copy}
                   copyDays={copyDays}
                   reload={refresh}
@@ -334,7 +361,14 @@ function App() {
                   onChanged={changed}
                 />
               ) : (
-                <RosterIndex catalog={catalog} workings={workings} onAdd={addWorking} onNewSet={()=>setAddSet(true)} onOpen={id=>void openWorking(id)} reload={refresh}/>
+                <RosterIndex
+                  catalog={catalog}
+                  workings={workings}
+                  onAdd={addWorking}
+                  onNewSet={() => setAddSet(true)}
+                  onOpen={(id) => void openWorking(id)}
+                  reload={refresh}
+                />
               ))}
             {tab === "History" && (
               <section className="panel">
@@ -352,14 +386,15 @@ function App() {
                       {e.action} · {e.entityType}
                     </strong>
                     <p>{e.reason}</p>
-                    <small>
-                      {new Date(e.createdAt).toLocaleString()}
-                    </small>
+                    <small>{new Date(e.createdAt).toLocaleString()}</small>
                     <details>
                       <summary>Inspect retained before / after values</summary>
                       <pre>
                         {JSON.stringify(
-                          { before: readableResearch(e.before), after: readableResearch(e.after) },
+                          {
+                            before: readableResearch(e.before),
+                            after: readableResearch(e.after),
+                          },
                           null,
                           2,
                         )}

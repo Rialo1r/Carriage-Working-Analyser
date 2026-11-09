@@ -1,4 +1,5 @@
-import {registerAnalysis} from "./analysis-routes.js";
+import { registerRotations } from "./rotations.js";
+import { registerAnalysis } from "./analysis-routes.js";
 import Fastify from "fastify";
 import staticFiles from "@fastify/static";
 import { z } from "zod";
@@ -67,11 +68,11 @@ export async function buildApp(
     return {
       status: "ok",
       application: "LNER Carriage Working & Rotation Planner",
-      phase: 1,
+      phase: 3,
     };
   });
   app.get("/api/dashboard", async () => ({
-    phase: 1,
+    phase: 3,
     diagrams: await db.publishedDiagram.count(),
     workings: await db.workingDefinition.count(),
     physicalSets: await db.physicalSet.count(),
@@ -91,6 +92,7 @@ export async function buildApp(
   registerWorkings(app, db);
   registerTimetable(app, db);
   registerAnalysis(app, db);
+  registerRotations(app, db);
   if (options.serveWeb !== false) {
     try {
       await access(path.resolve("dist/index.html"));

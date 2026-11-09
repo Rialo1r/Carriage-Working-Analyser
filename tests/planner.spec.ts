@@ -17,7 +17,10 @@ async function choose(locator: Locator, pattern: RegExp) {
 async function nav(page: Page, name: string) {
   await page
     .getByRole("navigation", { name: "Main navigation" })
-    .getByRole("button", { name:name==="Workings"?"Carriage Roster":name, exact: true })
+    .getByRole("button", {
+      name: name === "Workings" ? "Carriage Roster" : name,
+      exact: true,
+    })
     .click();
 }
 async function openWorking(page: Page, label: string) {
@@ -313,7 +316,11 @@ test("Phase 1 end-to-end manual entry, variants, exact continuation selection an
   await expect(board.getByText("SYNTHETIC no SF", { exact: true })).toHaveCount(
     1,
   );
-  await expect(board.getByText("Unverified", { exact: true })).toHaveCount(7);
+  await expect(
+    board.getByText("Unverified — check connections in Stock Chains", {
+      exact: true,
+    }),
+  ).toHaveCount(7);
   const timetable = await (
     await page.request.get("/api/timetable?start=1939-07-03&weeks=2")
   ).json();
@@ -344,5 +351,89 @@ test("Phase 1 end-to-end manual entry, variants, exact continuation selection an
       () => document.documentElement.scrollWidth <= innerWidth,
     ),
   ).toBe(true);
+  expect(errors).toEqual([]);
+});
+test("Updated roster, connection checks, approved rotation and iPad layout", async ({
+  page,
+}) => {
+  const { db } = instance;
+  const p = await db.historicalPeriod.create({
+    data: { name: "SYNTHETIC browser rotation" },
+  });
+  const station = await db.station.create({ data: { name: "Synthetic York" } });
+  const d = await db.publishedDiagram.create({
+    data: { periodId: p.id, number: "BROWSER-A" },
+  });
+  const w = await db.workingDefinition.create({
+    data: {
+      diagramId: d.id,
+      label: "Browser daily",
+      startStationId: station.id,
+      finishStationId: station.id,
+      calendar: { create: { weekdays: [0, 1, 2, 3, 4, 5, 6] } },
+    },
+  });
+  for (let weekday = 0; weekday < 7; weekday++)
+    await db.nextWorkingReference.create({
+      data: {
+        workingId: w.id,
+        weekday,
+        kind: "TARGET",
+        targetWorkingId: w.id,
+        offsetDays: 1,
+      },
+    });
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await page.goto("/");
+  await nav(page, "Stock Chains");
+  await choose(
+    page.getByLabel("Historical period", { exact: true }),
+    /SYNTHETIC browser rotation/,
+  );
+  await page.getByLabel("Weeks to analyse").fill("2");
+  await page
+    .getByRole("button", { name: "Check All Connections", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Connection review", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Possible candidate", { exact: true }).first(),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Generate Rotations", exact: true })
+    .click();
+  await page.getByText(/BROWSER-A · 1939-01-02 · 14 workings/).click();
+  await page
+    .getByRole("button", { name: "Approve & assign physical set", exact: true })
+    .click();
+  expect(errors).toEqual([]);
+  await page.getByLabel("Rotation name").fill("Browser approved stock");
+  await page
+    .getByLabel("Approval evidence / reason")
+    .fill("Synthetic manual review of missing times and formation");
+  await page
+    .getByLabel("I accept the displayed uncertainties and open ends.")
+    .check();
+  await page
+    .getByRole("button", { name: "Save approved rotation", exact: true })
+    .click();
+  await expect(
+    page.getByText(/CS-\d+ · Browser approved stock · Locked/),
+  ).toBeVisible();
+  await nav(page, "Issues");
+  await expect(
+    page.getByRole("heading", { name: "Issues & conflicts" }),
+  ).toBeVisible();
+  await expect(page.getByText(/Timing/).first()).toBeVisible();
+  await page.setViewportSize({ width: 820, height: 1180 });
+  await nav(page, "Stations & Types").catch(async () => nav(page, "Registers"));
+  await expect(
+    page.getByRole("heading", { name: "Stations & carriage types" }),
+  ).toBeVisible();
+  expect(await page.locator("main").innerText()).not.toMatch(
+    /[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}/,
+  );
   expect(errors).toEqual([]);
 });

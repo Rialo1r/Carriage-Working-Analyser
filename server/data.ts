@@ -46,7 +46,22 @@ export async function audit(
   before: unknown,
   after: unknown,
 ) {
-  if(!['Connection review','Issue review','Rotation review','Physical set','Manual assignment','Rotation assignment','Rotation'].includes(entityType))await tx.datasetState.upsert({where:{id:'main'},create:{id:'main',version:1},update:{version:{increment:1}}});
+  if (
+    ![
+      "Connection review",
+      "Issue review",
+      "Rotation review",
+      "Physical set",
+      "Manual assignment",
+      "Rotation assignment",
+      "Rotation",
+    ].includes(entityType)
+  )
+    await tx.datasetState.upsert({
+      where: { id: "main" },
+      create: { id: "main", version: 1 },
+      update: { version: { increment: 1 } },
+    });
   return tx.auditEvent.create({
     data: {
       entityId,

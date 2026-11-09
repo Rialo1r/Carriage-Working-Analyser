@@ -1,20 +1,17 @@
-# Phase 1 validation evidence
+# Updated planner validation
 
-This evidence applies to the fresh **LNER Carriage Working & Rotation Planner**, not the deleted analyser implementation.
+Validation targets the manual-entry planner and the updated roster/continuity/rotation build. Synthetic fixtures are confined to disposable test databases; historical research is not seeded.
 
-- TypeScript checking and production Vite build passed.
-- Ten named PostgreSQL integration scenarios passed (11 Node test results including the parent group), with no failures or skipped tests.
-- The Chromium end-to-end workflow passed: manual station/type/period/diagram entry, formation totals, one weekday definition, Saturday/Sunday copies, ambiguous continuation alternatives, exact target selection, an audited edit, permanent physical-set creation and seven manual dated assignments.
-- A two-week timetable retained distinct Monday occurrence UUIDs. Sunday referenced the following Monday without an automatic continuity or recurrence claim. SF instructions appeared on Monday–Saturday only, with the separate Sunday instruction preserved.
-- Repeated timetable materialisation reused occurrence UUIDs and did not duplicate rows. Competing exclusive manual allocations produced one success and one conflict response without silent reassignment.
-- The isolated Docker test stack passed the integration group and browser workflow against a fresh ephemeral PostgreSQL database.
-- A custom-format PostgreSQL backup restored working definitions, dated occurrences, next-working references, sources, audit records, physical-set IDs and manual assignments into a separate disposable database. The permanent CS serial sequence continued correctly.
-- Restarting the PostgreSQL container preserved the entered records and UUIDs.
-- The actual planner Compose stack started successfully on port 4310 with an empty research database. Synthetic fixtures were confined to test databases.
-- npm audit reported zero known vulnerabilities after updating Fastify to its patched release.
+- TypeScript checking and production Vite build pass.
+- PostgreSQL integration tests cover catalogue editing, safe replacement/archive/restore, hidden permanent identities, multi-day entry, exact continuation selection, distinct dated occurrences, repeated materialisation, exclusive allocation conflicts, stale-edit protection and retained audit history.
+- Continuity tests exercise destination mismatch, missing times, formation differences and legitimate attachments, overnight Sunday/Monday timing, unknown continuations, repeatable analysis, original findings and dismissal history.
+- Rotation tests exercise the weekly 262/822A pattern with SF instructions Monday–Saturday, a full 14-day pattern over six weeks, an open three-day chain without an unsupported recurrence claim, Saturday-only stabling, repeatable proposal generation, physical-set creation, exclusive conflicts and locked snapshot preservation.
+- Chromium tests cover the complete manual-entry workflow and the new connection-analysis → generate → approve → locked-rotation workflow, issues navigation, hidden UUIDs and an iPad-sized viewport.
+- The isolated Docker test stack passes the integration and browser workflows. Production Compose starts with additive migrations and the phase 3 health response; no synthetic research is seeded.
+- A custom-format backup restores saved rotations, dated workings and audit records into a separate disposable database.
+- npm audit reports zero known production dependency vulnerabilities.
+- Additive migrations run twice in the integration harness to verify repeat application is safe.
 
-The browser workflow caught and verified fixes for copied-weekday state leaking into an edit and a late refresh reopening a working after navigation.
+The documented Windows instructions use the same Docker Compose files. Validation runs on Linux Docker and Chromium; native Windows 11, PowerShell, Safari and physical iPad networking have not been directly exercised. GitHub Actions is configured; local results do not imply a later remote CI run succeeded.
 
-Validation ran in Linux Docker/Chromium. Windows 11 Docker Desktop and native PowerShell execution have not been directly exercised. The Windows instructions use the same verified Compose files and include file-location checks. GitHub Actions is configured, but local test results do not establish the result of a later remote CI run.
-
-Automatic continuity checks, suggestions, rotation generation, approval/locking and PDF/Excel/CSV reporting are outside Phase 1 and were not implemented or claimed as tested. Phase 2 awaits approval.
+PDF/Excel/CSV report exports remain deferred. Missing evidence and open ends are deliberately visible, rather than treated as verified research.

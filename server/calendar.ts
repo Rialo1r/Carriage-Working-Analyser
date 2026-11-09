@@ -13,7 +13,7 @@ export const weekday = (date: Date) => (date.getUTCDay() + 6) % 7;
 export const addDays = (date: Date, days: number) =>
   new Date(date.getTime() + days * 86400000);
 export function onCalendar(calendar: any, date: Date, period?: any): boolean {
-  if(period?.archived)return false;
+  if (period?.archived) return false;
   const key = dateKey(date);
   if (
     (period?.startDate && key < dateKey(period.startDate)) ||
@@ -28,12 +28,21 @@ export function onCalendar(calendar: any, date: Date, period?: any): boolean {
   const exception = calendar?.exceptions?.find(
     (e: any) => dateKey(e.date) === key,
   );
-  if(exception)return exception.operates;
-  if(calendar?.cycleWeeks>1){
-    if(!calendar.anchorDate)return false;
-    const anchor=new Date(calendar.anchorDate);anchor.setUTCDate(anchor.getUTCDate()-weekday(anchor));
-    const week=Math.floor((date.getTime()-anchor.getTime())/(7*86400000));
-    if(!(calendar.weekOffsets||[0]).includes(((week%calendar.cycleWeeks)+calendar.cycleWeeks)%calendar.cycleWeeks))return false;
+  if (exception) return exception.operates;
+  if (calendar?.cycleWeeks > 1) {
+    if (!calendar.anchorDate) return false;
+    const anchor = new Date(calendar.anchorDate);
+    anchor.setUTCDate(anchor.getUTCDate() - weekday(anchor));
+    const week = Math.floor(
+      (date.getTime() - anchor.getTime()) / (7 * 86400000),
+    );
+    if (
+      !(calendar.weekOffsets || [0]).includes(
+        ((week % calendar.cycleWeeks) + calendar.cycleWeeks) %
+          calendar.cycleWeeks,
+      )
+    )
+      return false;
   }
   return !!calendar?.weekdays?.includes(weekday(date));
 }

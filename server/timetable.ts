@@ -1,3 +1,5 @@
+import { assertAllocation } from "./rotations.js";
+import { guardLockedLink } from "./research-guards.js";
 import { FastifyInstance } from "fastify";
 import { PrismaClient } from "@prisma/client";
 import { z } from "zod";
@@ -14,20 +16,23 @@ import {
 import { uuid, text, httpError } from "./validation.js";
 const range = z.object({
   start: z.iso.date(),
-  weeks: z.coerce.number().int().min(1).max(4).default(1),
+  weeks: z.coerce.number().int().min(1).max(26).default(1),
 });
 export function registerTimetable(app: FastifyInstance, db: PrismaClient) {
   app.post("/api/timetable/materialize", async (req) => {
     const q = range.parse(req.body),
       start = new Date(q.start);
     const workings = await db.workingDefinition.findMany({
-      where:{archived:false,diagram:{archived:false,period:{archived:false}}},
+      where: {
+        archived: false,
+        diagram: { archived: false, period: { archived: false } },
+      },
       include: workingInclude,
     });
     if (workings.length > 2000)
       throw httpError(
         400,
-        "Limit this Phase 1 timetable to 2,000 working definitions.",
+        "Limit this timetable to 2,000 working definitions.",
       );
     await db.$transaction(
       async (tx) => {
@@ -47,7 +52,7 @@ export function registerTimetable(app: FastifyInstance, db: PrismaClient) {
             if (r) {
               note =
                 r.notes ||
-                "Entered instruction — continuity not checked in Phase 1.";
+                "Entered instruction — check its live continuity in Stock Chains.";
               const target = targetDate(date, r);
               if (r.kind === "TARGET" && r.targetWorkingId && target) {
                 const next = workings.find((x) => x.id === r.targetWorkingId);
@@ -110,11 +115,22 @@ export function registerTimetable(app: FastifyInstance, db: PrismaClient) {
       },
       orderBy: [{ date: "asc" }, { id: "asc" }],
     });
+    const approved = await db.approvedConnection.findMany({
+      where: { active: true, fromId: { in: all.map((o) => o.id) } },
+    });
+    const issues = await db.planningIssue.findMany({
+      where: { active: true, fromId: { in: all.map((o) => o.id) } },
+    });
+    const rotations = await db.savedRotation.findMany({
+      where: { active: true },
+    });
     const occurrences = all
       .filter(
         (o) =>
           o.assignments.length ||
-          !o.working.archived&&!o.working.diagram.archived&&onCalendar(o.working.calendar, o.date, o.working.diagram.period),
+          (!o.working.archived &&
+            !o.working.diagram.archived &&
+            onCalendar(o.working.calendar, o.date, o.working.diagram.period)),
       )
       .map((o) => {
         const variation = o.working.variations.find(
@@ -123,11 +139,10 @@ export function registerTimetable(app: FastifyInstance, db: PrismaClient) {
         const formation = variation ? variation.formation : o.working.formation;
         return {
           ...o,
-          onCalendar: !o.working.archived&&!o.working.diagram.archived&&onCalendar(
-            o.working.calendar,
-            o.date,
-            o.working.diagram.period,
-          ),
+          onCalendar:
+            !o.working.archived &&
+            !o.working.diagram.archived &&
+            onCalendar(o.working.calendar, o.date, o.working.diagram.period),
           formation,
           formationCount: formationCount(formation),
           instructions: o.working.instructions.filter(
@@ -144,7 +159,13 @@ export function registerTimetable(app: FastifyInstance, db: PrismaClient) {
             },
             workingRevised: a.definitionRevision !== o.working.revision,
           })),
-          connectionStatus: "Unverified — Phase 1 manual entry",
+          connectionStatus: issues.some(
+            (i) => i.fromId === o.id && i.severity === "Error",
+          )
+            ? "In conflict"
+            : approved.some((a) => a.fromId === o.id)
+              ? "Confirmed by research — review current issues"
+              : "Unverified — check connections in Stock Chains",
         };
       });
     return {
@@ -153,6 +174,11 @@ export function registerTimetable(app: FastifyInstance, db: PrismaClient) {
         dateKey(addDays(start, i)),
       ),
       occurrences,
+      storage: rotations.flatMap((r) =>
+        ((r.snapshot as any).links || [])
+          .filter((l: any) => l.storage)
+          .map((l: any) => ({ ...l.storage, physicalSetId: r.physicalSetId })),
+      ),
       physicalSets: (
         await db.physicalSet.findMany({ orderBy: { serial: "asc" } })
       ).map((s) => ({ ...s, code: setCode(s.serial) })),
@@ -168,11 +194,16 @@ export function registerTimetable(app: FastifyInstance, db: PrismaClient) {
           where: { id: data.occurrenceId },
           include: { working: { include: workingInclude } },
         });
-        if (o.working.archived||o.working.diagram.archived||!onCalendar(o.working.calendar, o.date, o.working.diagram.period))
+        if (
+          o.working.archived ||
+          o.working.diagram.archived ||
+          !onCalendar(o.working.calendar, o.date, o.working.diagram.period)
+        )
           throw httpError(
             400,
             "This occurrence is outside the current operating calendar. Edit the working or choose another occurrence.",
           );
+        await assertAllocation(tx, data.physicalSetId, o);
         const before = await tx.rotationAssignment.findUnique({
           where: {
             physicalSetId_occurrenceId: {
@@ -226,6 +257,7 @@ export function registerTimetable(app: FastifyInstance, db: PrismaClient) {
         where: { id },
         include: { occurrence: true },
       });
+      await guardLockedLink(tx, before.occurrenceId);
       const after = await tx.rotationAssignment.update({
         where: { id },
         data: { active: false, exclusiveKey: null },

@@ -107,10 +107,12 @@ export function WorkingEditor({
               exclusive,
               calendar: {
                 weekdays,
-                cycleWeeks:Number(v.cycleWeeks||1),
-              anchorDate:v.anchorDate||null,
-              weekOffsets:String(v.weekOffsets||"1").split(",").map(x=>Number(x.trim())-1),
-              validFrom: v.validFrom || null,
+                cycleWeeks: Number(v.cycleWeeks || 1),
+                anchorDate: v.anchorDate || null,
+                weekOffsets: String(v.weekOffsets || "1")
+                  .split(",")
+                  .map((x) => Number(x.trim()) - 1),
+                validFrom: v.validFrom || null,
                 validTo: v.validTo || null,
                 notes: v.calendarNotes,
                 exceptions: exceptions.map((e) => ({
@@ -205,7 +207,36 @@ export function WorkingEditor({
             value={w?.calendar?.validTo?.slice(0, 10)}
           />
         </div>
-        <details><summary>Alternate-week or multi-week operating calendar</summary><p>Use week 1 for ordinary weekly workings. For alternate weeks choose a two-week cycle, its first-week anchor date, and week 1 or 2.</p><div className="fields"><Input label="Calendar cycle length (weeks)" name="cycleWeeks" type="number" min={1} max={12} value={w?.calendar?.cycleWeeks||1}/><Input label="First-week anchor date" name="anchorDate" type="date" value={w?.calendar?.anchorDate?.slice(0,10)}/></div><Input label="Active cycle weeks (comma-separated, starting at 1)" name="weekOffsets" value={(w?.calendar?.weekOffsets||[0]).map((n:number)=>n+1).join(',')}/></details>
+        <details>
+          <summary>Alternate-week or multi-week operating calendar</summary>
+          <p>
+            Use week 1 for ordinary weekly workings. For alternate weeks choose
+            a two-week cycle, its first-week anchor date, and week 1 or 2.
+          </p>
+          <div className="fields">
+            <Input
+              label="Calendar cycle length (weeks)"
+              name="cycleWeeks"
+              type="number"
+              min={1}
+              max={12}
+              value={w?.calendar?.cycleWeeks || 1}
+            />
+            <Input
+              label="First-week anchor date"
+              name="anchorDate"
+              type="date"
+              value={w?.calendar?.anchorDate?.slice(0, 10)}
+            />
+          </div>
+          <Input
+            label="Active cycle weeks (comma-separated, starting at 1)"
+            name="weekOffsets"
+            value={(w?.calendar?.weekOffsets || [0])
+              .map((n: number) => n + 1)
+              .join(",")}
+          />
+        </details>
         <Text
           label="Operating calendar notes"
           name="calendarNotes"
@@ -267,8 +298,8 @@ export function WorkingEditor({
         </div>
         <p className="muted">
           Day 0 is the operating date. A Sunday working finishing at 00:30 on
-          Monday has finish day offset 1. Missing times remain unknown; Phase 1
-          does not validate connections.
+          Monday has finish day offset 1. Missing times remain unknown. Use
+          Stock Chains to check dated connections.
         </p>
         <Input
           label="Route description"
@@ -490,7 +521,7 @@ function Continuations({
   onChanged,
   catalog,
 }: {
-  catalog:Row;
+  catalog: Row;
   working: Row;
   workings: Row[];
   onChanged: () => Promise<void>;
@@ -503,7 +534,8 @@ function Continuations({
     [offset, setOffset] = useState(1),
     [targetDay, setTargetDay] = useState(0),
     [targetDate, setTargetDate] = useState("");
-  const [storage,setStorage]=useState(""),[verified,setVerified]=useState(false);
+  const [storage, setStorage] = useState(""),
+    [verified, setVerified] = useState(false);
   const candidates = workings.filter(
     (t) =>
       !number || t.diagram.number.toLowerCase() === number.trim().toLowerCase(),
@@ -569,13 +601,14 @@ function Continuations({
             rules: scope.map((weekday) => ({
               weekday,
               kind,
-              targetWorkingId: ["TARGET","STABLED"].includes(kind) ? target || null : null,
-              enteredNumber:
-                ["TARGET","STABLED"].includes(kind)
-                  ? number ||
-                    workings.find((x) => x.id === target)?.diagram.number ||
-                    null
-                  : null,
+              targetWorkingId: ["TARGET", "STABLED"].includes(kind)
+                ? target || null
+                : null,
+              enteredNumber: ["TARGET", "STABLED"].includes(kind)
+                ? number ||
+                  workings.find((x) => x.id === target)?.diagram.number ||
+                  null
+                : null,
               offsetDays:
                 kind !== "UNKNOWN" && kind !== "END" && mode === "offset"
                   ? offset
@@ -588,7 +621,7 @@ function Continuations({
                 kind !== "UNKNOWN" && kind !== "END" && mode === "date"
                   ? targetDate || null
                   : null,
-              storageStationId:kind==="STABLED"?storage||null:null,
+              storageStationId: kind === "STABLED" ? storage || null : null,
               verified,
               notes: String(new FormData(f).get("notes") || ""),
             })),
@@ -640,7 +673,7 @@ function Continuations({
             Different Diagram Next Day
           </button>
         </div>
-        {["TARGET","STABLED"].includes(kind) && (
+        {["TARGET", "STABLED"].includes(kind) && (
           <>
             <label>
               Published number to find
@@ -730,8 +763,38 @@ function Continuations({
             )}
           </>
         )}
-        {kind==='STABLED'&&<><SearchSelect label="Stabling location" value={storage} onChange={setStorage} options={catalog.stations.map((s:Row)=>({id:s.id,label:s.name}))}/><button type="button" onClick={()=>setStorage(w.finishStationId||'')}>Use this day's finishing station for storage</button><p className="muted">Leave the storage location unknown if it is not established. Select a resuming working above to continue the chain after storage.</p></>}
-        <label className="check"><input type="checkbox" checked={verified} onChange={e=>setVerified(e.target.checked)}/>I checked this continuation against the entered source citation</label>
+        {kind === "STABLED" && (
+          <>
+            <SearchSelect
+              label="Stabling location"
+              value={storage}
+              onChange={setStorage}
+              options={catalog.stations.map((s: Row) => ({
+                id: s.id,
+                label: s.name,
+              }))}
+            />
+            <button
+              type="button"
+              onClick={() => setStorage(w.finishStationId || "")}
+            >
+              Use this day's finishing station for storage
+            </button>
+            <p className="muted">
+              Leave the storage location unknown if it is not established.
+              Select a resuming working above to continue the chain after
+              storage.
+            </p>
+          </>
+        )}
+        <label className="check">
+          <input
+            type="checkbox"
+            checked={verified}
+            onChange={(e) => setVerified(e.target.checked)}
+          />
+          I checked this continuation against the entered source citation
+        </label>
         <Text label="Continuation source instruction / notes" name="notes" />
         <Input label="Reason for continuation change" name="reason" required />
       </SaveForm>
@@ -809,9 +872,7 @@ export function WorkingDetail({
           </p>
         ))}
         <p>{w.notes}</p>
-        <small>
-          Revision {w.revision}
-        </small>
+        <small>Revision {w.revision}</small>
       </section>
       <div className="two-columns">
         <Continuations
